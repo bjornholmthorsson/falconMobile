@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { useAppStore } from '../store/appStore';
 
 import LoginScreen from '../screens/LoginScreen';
@@ -62,8 +62,17 @@ function MainTabs() {
 
 export default function AppNavigator() {
   const isAuthenticated = useAppStore(s => s.isAuthenticated);
+  const authRestored = useAppStore(s => s.authRestored);
   useLocationWatcher();
   useLoadCurrentUser();
+
+  if (!authRestored) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' }}>
+        <ActivityIndicator size="large" color="#0078D4" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>

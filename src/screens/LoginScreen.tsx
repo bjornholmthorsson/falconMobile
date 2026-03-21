@@ -13,12 +13,14 @@ import { useAppStore } from '../store/appStore';
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
+  const setAuthRestored = useAppStore(s => s.setAuthRestored);
 
   async function handleSignIn() {
     setLoading(true);
     try {
       await signIn();
-      // Navigate immediately — user profile loads in background on HomeScreen
+      setLoading(false);
+      setAuthRestored(true);
       setIsAuthenticated(true);
     } catch (err: any) {
       Alert.alert('Sign in failed', err?.message ?? 'Unknown error');
