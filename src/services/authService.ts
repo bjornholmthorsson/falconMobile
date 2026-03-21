@@ -3,6 +3,13 @@
  *
  * Client ID and redirect URIs match the existing Xamarin app so the same
  * Azure AD app registration is reused without any changes.
+ *
+ * Token strategy:
+ *   - After signIn(), the token is held in memory — no AsyncStorage read needed
+ *     for subsequent getAccessToken() calls within the same app session.
+ *   - AsyncStorage is used only for cold-start restoration (isSignedIn) and
+ *     persistence (storeTokens), both wrapped with a 5 s timeout so a broken
+ *     storage layer can't freeze the app.
  */
 import { authorize, refresh, revoke } from 'react-native-app-auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,6 +53,58 @@ const STORAGE_KEYS = {
   TOKEN_EXPIRY: '@falcon/tokenExpiry',
 };
 
+// ── In-memory token cache ─────────────────────────────────────────────────────
+// Avoids AsyncStorage reads on every API call within the same app session.
+
+interface MemToken {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // ms since epoch
+}
+
+let memToken: MemToken | null = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
+function storageGet(key: string): Promise<string | null> {
+  return withTimeout(AsyncStorage.getItem(key), 5_000, 'storage_timeout');
+}
+
+function storageSet(key: string, value: string): Promise<void> {
+  return withTimeout(AsyncStorage.setItem(key, value), 5_000, 'storage_timeout');
+}
+
+function storageRemove(key: string): Promise<void> {
+  return withTimeout(AsyncStorage.removeItem(key), 5_000, 'storage_timeout');
+}
+
+async function clearStoredTokens(): Promise<void> {
+  memToken = null;
+  await Promise.allSettled(Object.values(STORAGE_KEYS).map(k => storageRemove(k)));
+}
+
+async function storeTokens(
+  accessToken: string,
+  refreshToken: string,
+  expiryDate: string,
+): Promise<void> {
+  const expiresAt = new Date(expiryDate).getTime();
+  memToken = { accessToken, refreshToken, expiresAt };
+  // Persist in background — don't block the caller if storage is slow
+  Promise.allSettled([
+    storageSet(STORAGE_KEYS.ACCESS_TOKEN, accessToken),
+    storageSet(STORAGE_KEYS.REFRESH_TOKEN, refreshToken),
+    storageSet(STORAGE_KEYS.TOKEN_EXPIRY, expiryDate),
+  ]);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function signIn(): Promise<string> {
@@ -55,80 +114,93 @@ export async function signIn(): Promise<string> {
 }
 
 export async function signOut(): Promise<void> {
-  const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-  if (refreshToken) {
-    try {
-      await revoke(AUTH_CONFIG, { tokenToRevoke: refreshToken });
-    } catch {
-      // ignore revocation errors
-    }
+  const rt = memToken?.refreshToken;
+  if (rt) {
+    try { await revoke(AUTH_CONFIG, { tokenToRevoke: rt }); } catch { /* ignore */ }
   }
   await clearStoredTokens();
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
-  ]);
-}
-
 export async function getAccessToken(): Promise<string> {
-  const [token, expiry, refreshToken] = await Promise.all([
-    AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN),
-    AsyncStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY),
-    AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN),
-  ]);
+  const BUFFER = 5 * 60 * 1000; // refresh 5 min before expiry
 
-  if (!token) throw new Error('Not authenticated');
+  // ── 1. Use in-memory token if still fresh ──────────────────────────────────
+  if (memToken && Date.now() < memToken.expiresAt - BUFFER) {
+    return memToken.accessToken;
+  }
 
-  // Refresh if within 5 minutes of expiry
-  if (expiry && Date.now() > new Date(expiry).getTime() - 5 * 60 * 1000) {
-    if (!refreshToken) {
-      await clearStoredTokens();
-      throw new Error('Not authenticated');
-    }
+  // ── 2. Refresh if we have a refresh token in memory ───────────────────────
+  if (memToken?.refreshToken) {
     try {
       const result = await withTimeout(
-        refresh(AUTH_CONFIG, { refreshToken }),
+        refresh(AUTH_CONFIG, { refreshToken: memToken.refreshToken }),
         10_000,
         'Not authenticated',
       );
       await storeTokens(
         result.accessToken,
-        result.refreshToken ?? refreshToken,
+        result.refreshToken ?? memToken.refreshToken,
         result.accessTokenExpirationDate,
       );
-      return result.accessToken;
+      return memToken!.accessToken;
     } catch {
-      // Refresh token is expired or invalid — clear everything and force re-login
       await clearStoredTokens();
       throw new Error('Not authenticated');
     }
   }
 
-  return token;
+  // ── 3. Cold start: read from AsyncStorage (with timeout) ──────────────────
+  let token: string | null = null;
+  let expiry: string | null = null;
+  let refreshToken: string | null = null;
+  try {
+    [token, expiry, refreshToken] = await Promise.all([
+      storageGet(STORAGE_KEYS.ACCESS_TOKEN),
+      storageGet(STORAGE_KEYS.TOKEN_EXPIRY),
+      storageGet(STORAGE_KEYS.REFRESH_TOKEN),
+    ]);
+  } catch {
+    throw new Error('Not authenticated');
+  }
+
+  if (!token) throw new Error('Not authenticated');
+
+  const expiresAt = expiry ? new Date(expiry).getTime() : Date.now() + 60_000;
+  memToken = { accessToken: token, refreshToken: refreshToken ?? '', expiresAt };
+
+  if (Date.now() < expiresAt - BUFFER) {
+    return token;
+  }
+
+  // Token is near/past expiry — refresh
+  if (!refreshToken) {
+    await clearStoredTokens();
+    throw new Error('Not authenticated');
+  }
+  try {
+    const result = await withTimeout(
+      refresh(AUTH_CONFIG, { refreshToken }),
+      10_000,
+      'Not authenticated',
+    );
+    await storeTokens(
+      result.accessToken,
+      result.refreshToken ?? refreshToken,
+      result.accessTokenExpirationDate,
+    );
+    return memToken!.accessToken;
+  } catch {
+    await clearStoredTokens();
+    throw new Error('Not authenticated');
+  }
 }
 
 export async function isSignedIn(): Promise<boolean> {
-  const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-  return !!token;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function clearStoredTokens(): Promise<void> {
-  await Promise.all(Object.values(STORAGE_KEYS).map(k => AsyncStorage.removeItem(k)));
-}
-
-async function storeTokens(
-  accessToken: string,
-  refreshToken: string,
-  expiryDate: string,
-): Promise<void> {
-  await Promise.all([
-    AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken),
-    AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken),
-    AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryDate),
-  ]);
+  if (memToken) return true;
+  try {
+    const token = await storageGet(STORAGE_KEYS.ACCESS_TOKEN);
+    return !!token;
+  } catch {
+    return false;
+  }
 }
