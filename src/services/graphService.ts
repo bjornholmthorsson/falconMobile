@@ -10,6 +10,7 @@ import type { User, TeamsPresence } from '../models';
 import { getAccessToken } from './authService';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
+const TIMEOUT_MS = 15_000;
 
 // Offices to filter users by (value matches Graph user.city field)
 export const OFFICES = ['Amsterdam', 'Reykjavik', 'Akureyri', 'Lisbon'] as const;
@@ -23,6 +24,7 @@ async function graphGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await axios.get<T>(`${GRAPH}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
+    timeout: TIMEOUT_MS,
   });
   return res.data;
 }
@@ -36,6 +38,7 @@ async function graphPost<T>(
   const res = await axios.post<T>(`${GRAPH}${path}`, body, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
+    timeout: TIMEOUT_MS,
   });
   return res.data;
 }
@@ -49,6 +52,7 @@ async function graphPatch(
   await axios.patch(`${GRAPH}${path}`, body, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
+    timeout: TIMEOUT_MS,
   });
 }
 

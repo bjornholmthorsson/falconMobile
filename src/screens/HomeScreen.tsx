@@ -139,9 +139,17 @@ async function fetchAllOfficeSummaries(): Promise<OfficeSummary[]> {
   );
 
   const summaries: OfficeSummary[] = [];
+  const errors: unknown[] = [];
   for (const r of results) {
     if (r.status === 'fulfilled') summaries.push(r.value);
+    else errors.push(r.reason);
   }
+
+  // If every office failed, surface the first error so useQuery shows the error state
+  if (summaries.length === 0 && errors.length > 0) {
+    throw errors[0];
+  }
+
   return summaries;
 }
 
