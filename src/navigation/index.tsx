@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useAppStore } from '../store/appStore';
@@ -14,57 +15,63 @@ import MyLocationScreen from '../screens/MyLocationScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
 
+const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+function MainTabs() {
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ color, size }) => {
+          const icons: Record<string, string> = {
+            Home: '🏠',
+            Employees: '👥',
+            Absence: '📅',
+            Location: '📍',
+            Profile: '👤',
+          };
+          return <Text style={{ fontSize: size - 4 }}>{icons[route.name] ?? '●'}</Text>;
+        },
+        tabBarActiveTintColor: '#0078D4',
+        tabBarInactiveTintColor: '#9ca3af',
+        headerShown: true,
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Employees">
+        {() => (
+          <>
+            <EmployeesScreen onSelectEmployee={setSelectedEmployee} />
+            <EmployeeDetailScreen
+              employee={selectedEmployee}
+              visible={!!selectedEmployee}
+              onClose={() => setSelectedEmployee(null)}
+            />
+          </>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Absence" component={RegisterAbsenceScreen} />
+      <Tab.Screen name="Location" component={MyLocationScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function AppNavigator() {
   const currentUser = useAppStore(s => s.currentUser);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   useLocationWatcher();
-
-  if (!currentUser) {
-    return (
-      <NavigationContainer>
-        <LoginScreen />
-      </NavigationContainer>
-    );
-  }
 
   return (
     <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ color, size }) => {
-            const icons: Record<string, string> = {
-              Home: '🏠',
-              Employees: '👥',
-              Absence: '📅',
-              Location: '📍',
-              Profile: '👤',
-            };
-            return <Text style={{ fontSize: size - 4 }}>{icons[route.name] ?? '●'}</Text>;
-          },
-          tabBarActiveTintColor: '#0078D4',
-          tabBarInactiveTintColor: '#9ca3af',
-          headerShown: true,
-        })}
-      >
-        <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Employees">
-          {() => (
-            <>
-              <EmployeesScreen onSelectEmployee={setSelectedEmployee} />
-              <EmployeeDetailScreen
-                employee={selectedEmployee}
-                visible={!!selectedEmployee}
-                onClose={() => setSelectedEmployee(null)}
-              />
-            </>
-          )}
-        </Tab.Screen>
-        <Tab.Screen name="Absence" component={RegisterAbsenceScreen} />
-        <Tab.Screen name="Location" component={MyLocationScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
-      </Tab.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {currentUser == null ? (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        ) : (
+          <Stack.Screen name="Main" component={MainTabs} />
+        )}
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }
