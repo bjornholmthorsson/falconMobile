@@ -1,124 +1,73 @@
 /**
- * Microsoft Authentication — Device Authorization Grant (RFC 8628).
+ * Microsoft Authentication — Authorization Code Flow with PKCE via react-native-app-auth.
  *
- * Uses pure fetch with no native OAuth library. This sidesteps all
- * react-native-app-auth / ASWebAuthenticationSession / URL-scheme issues
- * on iOS New Architecture (Bridgeless/Fabric).
+ * Uses the platform's native browser (ASWebAuthenticationSession on iOS,
+ * Chrome Custom Tabs on Android) for a proper sign-in experience.
  *
- * Flow:
- *   1. POST /devicecode  → get user_code + device_code
- *   2. Open browser to verification_uri (Linking.openURL — core RN, no native module)
- *   3. Poll /token every ~5 s until the user completes login in the browser
- *   4. Store tokens in memory; refresh automatically before expiry
+ * Redirect URI: com.falconmobile://auth/
+ * Must be registered in Azure AD → Authentication → Mobile/Desktop.
  */
+import { authorize, refresh } from 'react-native-app-auth';
 
 const CLIENT_ID = '3639c730-2334-44d6-9350-1cb2748da8d8';
 const TENANT_ID = 'common';
+const REDIRECT_URL = 'com.falconmobile://auth/';
+
 const SCOPES = [
   'openid', 'profile', 'offline_access',
   'User.Read', 'User.Read.All',
   'Presence.Read', 'Presence.Read.All',
   'ChatMessage.Send', 'Chat.ReadWrite',
-].join(' ');
+];
 
-const TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
-const DEVICE_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/devicecode`;
+const AUTH_CONFIG = {
+  clientId: CLIENT_ID,
+  redirectUrl: REDIRECT_URL,
+  scopes: SCOPES,
+  serviceConfiguration: {
+    authorizationEndpoint: `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize`,
+    tokenEndpoint: `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
+    revocationEndpoint: `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/logout`,
+  },
+  additionalParameters: { prompt: 'select_account' },
+} as const;
 
 // ── In-memory token store ─────────────────────────────────────────────────────
 
 interface MemToken {
   accessToken: string;
   refreshToken: string;
-  expiresAt: number;
+  expiresAt: number; // ms epoch
 }
 
 let memToken: MemToken | null = null;
 
-function parseExpiry(expiresIn: number): number {
-  return Date.now() + expiresIn * 1000;
-}
+// ── Sign in ───────────────────────────────────────────────────────────────────
 
-// ── Device code flow ──────────────────────────────────────────────────────────
-
-export interface DeviceCodeInfo {
-  userCode: string;
-  verificationUri: string;
-  deviceCode: string;
-  interval: number;   // seconds between polls
-  expiresIn: number;  // seconds until device code expires
-}
-
-/** Step 1: request a device code and return display info to the caller. */
-export async function requestDeviceCode(): Promise<DeviceCodeInfo> {
-  const res = await fetch(DEVICE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `client_id=${CLIENT_ID}&scope=${encodeURIComponent(SCOPES)}`,
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description ?? data.error ?? JSON.stringify(data));
-
-  return {
-    userCode: data.user_code,
-    verificationUri: data.verification_uri,
-    deviceCode: data.device_code,
-    interval: data.interval ?? 5,
-    expiresIn: data.expires_in ?? 900,
+/** Opens the native browser sign-in flow and stores the resulting tokens. */
+export async function signIn(): Promise<void> {
+  const result = await authorize(AUTH_CONFIG);
+  memToken = {
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken ?? '',
+    expiresAt: new Date(result.accessTokenExpirationDate).getTime(),
   };
 }
 
-/** Step 2: poll until the user completes authentication or the code expires. */
-export async function pollForToken(
-  deviceCode: string,
-  intervalSecs: number,
-  onTick?: () => void,      // called each poll so UI can cancel
-): Promise<void> {
-  const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-  while (true) {
-    await wait(intervalSecs * 1000);
-    onTick?.();
-
-    const res = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: [
-        `grant_type=urn:ietf:params:oauth:grant-type:device_code`,
-        `client_id=${CLIENT_ID}`,
-        `device_code=${deviceCode}`,
-      ].join('&'),
-    });
-
-    const data = await res.json();
-
-    if (data.access_token) {
-      memToken = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token ?? '',
-        expiresAt: parseExpiry(data.expires_in ?? 3600),
-      };
-      return;
-    }
-
-    if (data.error === 'authorization_pending' || data.error === 'slow_down') {
-      continue; // user hasn't authenticated yet
-    }
-
-    throw new Error(data.error_description ?? data.error ?? 'Authentication failed');
-  }
-}
-
-// ── Standard helpers ──────────────────────────────────────────────────────────
+// ── Sign out ──────────────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {
   memToken = null;
 }
 
+// ── Token access ──────────────────────────────────────────────────────────────
+
+const BUFFER_MS = 5 * 60 * 1000;
+
 export async function getAccessToken(): Promise<string> {
   if (!memToken) throw new Error('Not authenticated');
 
-  const BUFFER = 5 * 60 * 1000;
-  if (Date.now() < memToken.expiresAt - BUFFER) {
+  if (Date.now() < memToken.expiresAt - BUFFER_MS) {
     return memToken.accessToken;
   }
 
@@ -129,22 +78,11 @@ export async function getAccessToken(): Promise<string> {
   }
 
   try {
-    const res = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: [
-        `grant_type=refresh_token`,
-        `client_id=${CLIENT_ID}`,
-        `refresh_token=${encodeURIComponent(memToken.refreshToken)}`,
-        `scope=${encodeURIComponent(SCOPES)}`,
-      ].join('&'),
-    });
-    const data = await res.json();
-    if (!data.access_token) throw new Error('Refresh failed');
+    const result = await refresh(AUTH_CONFIG, { refreshToken: memToken.refreshToken });
     memToken = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token ?? memToken.refreshToken,
-      expiresAt: parseExpiry(data.expires_in ?? 3600),
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken ?? memToken.refreshToken,
+      expiresAt: new Date(result.accessTokenExpirationDate).getTime(),
     };
     return memToken.accessToken;
   } catch {

@@ -6,96 +6,43 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  Clipboard,
-  Linking,
 } from 'react-native';
-import { requestDeviceCode, pollForToken } from '../services/authService';
+import { signIn } from '../services/authService';
 import { useAppStore } from '../store/appStore';
 import AkkuroLogo from '../components/AkkuroLogo';
 
-type Stage =
-  | { kind: 'idle' }
-  | { kind: 'waiting'; userCode: string; verificationUri: string; deviceCode: string; interval: number }
-  | { kind: 'polling' };
-
 export default function LoginScreen() {
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
-  const setAuthRestored = useAppStore(s => s.setAuthRestored);
-
-  const [stage, setStage] = useState<Stage>({ kind: 'idle' });
+  const [loading, setLoading] = useState(false);
 
   async function handleSignIn() {
-    setStage({ kind: 'polling' }); // show spinner while requesting device code
+    setLoading(true);
     try {
-      const info = await requestDeviceCode();
-      setStage({
-        kind: 'waiting',
-        userCode: info.userCode,
-        verificationUri: info.verificationUri,
-        deviceCode: info.deviceCode,
-        interval: info.interval,
-      });
-
-      await pollForToken(info.deviceCode, info.interval);
-
-      setAuthRestored(true);
+      await signIn();
       setIsAuthenticated(true);
     } catch (err: any) {
-      Alert.alert('Sign in failed', err?.message ?? 'Unknown error', [
-        { text: 'OK', onPress: () => setStage({ kind: 'idle' }) },
-      ]);
+      // User cancelled — don't show an error
+      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) {
+        return;
+      }
+      Alert.alert('Sign in failed', err?.message ?? 'Unknown error');
+    } finally {
+      setLoading(false);
     }
-  }
-
-  if (stage.kind === 'polling') {
-    return (
-      <View style={styles.container}>
-        <Logo />
-        <ActivityIndicator size="large" color="#10493C" />
-        <Text style={styles.hint}>Requesting sign-in code…</Text>
-      </View>
-    );
-  }
-
-  if (stage.kind === 'waiting') {
-    return (
-      <View style={styles.container}>
-        <Logo />
-        <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>1. Copy this code:</Text>
-          <TouchableOpacity onPress={() => Clipboard.setString(stage.userCode)}>
-            <Text style={styles.userCode}>{stage.userCode}</Text>
-          </TouchableOpacity>
-          <Text style={styles.hint}>Tap the code to copy it</Text>
-        </View>
-        <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>2. Open the browser and sign in:</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => Linking.openURL(stage.verificationUri)}>
-            <Text style={styles.buttonText}>Open microsoft.com/devicelogin</Text>
-          </TouchableOpacity>
-        </View>
-        <ActivityIndicator size="small" color="#10493C" />
-        <Text style={styles.hint}>Waiting for you to sign in…</Text>
-      </View>
-    );
   }
 
   return (
     <View style={styles.container}>
-      <Logo />
-      <TouchableOpacity style={styles.button} onPress={handleSignIn}>
-        <Text style={styles.buttonText}>Sign in with Microsoft</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function Logo() {
-  return (
-    <View style={styles.logoWrapper}>
-      <AkkuroLogo width={206} height={36} />
+      <View style={styles.logoWrapper}>
+        <AkkuroLogo width={206} height={36} />
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color="#10493C" />
+      ) : (
+        <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+          <Text style={styles.buttonText}>Sign in with Microsoft</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -117,27 +64,4 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  codeCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  codeLabel: { fontSize: 14, color: '#666' },
-  codeUrl: { fontSize: 14, color: '#10493C', fontWeight: '600' },
-  userCode: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#111',
-    letterSpacing: 4,
-    marginVertical: 8,
-  },
-  hint: { fontSize: 13, color: '#888', textAlign: 'center' },
 });
