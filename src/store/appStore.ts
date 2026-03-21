@@ -19,7 +19,7 @@ interface AppState {
 export const useAppStore = create<AppState>(set => ({
   currentUser: null,
   isAuthenticated: false,
-  authRestored: false,
+  authRestored: true,
   selectedOffice: 'Amsterdam',
   isWorking: false,
 

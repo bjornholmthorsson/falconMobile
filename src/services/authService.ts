@@ -66,6 +66,13 @@ export async function signOut(): Promise<void> {
   await clearStoredTokens();
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
 export async function getAccessToken(): Promise<string> {
   const [token, expiry, refreshToken] = await Promise.all([
     AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN),
@@ -82,7 +89,11 @@ export async function getAccessToken(): Promise<string> {
       throw new Error('Not authenticated');
     }
     try {
-      const result = await refresh(AUTH_CONFIG, { refreshToken });
+      const result = await withTimeout(
+        refresh(AUTH_CONFIG, { refreshToken }),
+        10_000,
+        'Not authenticated',
+      );
       await storeTokens(
         result.accessToken,
         result.refreshToken ?? refreshToken,
