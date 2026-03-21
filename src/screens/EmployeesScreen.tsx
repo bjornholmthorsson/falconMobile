@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
   avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarPlaceholder: { backgroundColor: '#0078D4', alignItems: 'center', justifyContent: 'center' },
+  avatarPlaceholder: { backgroundColor: '#10493C', alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { color: '#fff', fontWeight: '600', fontSize: 16 },
   info: { flex: 1 },
   name: { fontSize: 15, fontWeight: '600', color: '#111' },

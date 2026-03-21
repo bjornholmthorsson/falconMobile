@@ -91,7 +91,7 @@ export default function ProfileScreen() {
           keyboardType="phone-pad"
         />
         {saving ? (
-          <ActivityIndicator color="#0078D4" />
+          <ActivityIndicator color="#10493C" />
         ) : (
           <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMobile}>
             <Text style={styles.saveBtnText}>Save</Text>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   displayName: { fontSize: 20, fontWeight: '700', color: '#111', marginBottom: 4 },
   upn: { fontSize: 13, color: '#666', marginBottom: 4 },
-  jobTitle: { fontSize: 14, color: '#0078D4' },
+  jobTitle: { fontSize: 14, color: '#10493C' },
   section: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   saveBtn: {
-    backgroundColor: '#0078D4',
+    backgroundColor: '#10493C',
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',

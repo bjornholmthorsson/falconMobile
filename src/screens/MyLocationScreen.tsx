@@ -108,7 +108,7 @@ export default function MyLocationScreen() {
       )}
 
       {loadingKnown ? (
-        <ActivityIndicator color="#0078D4" style={{ marginBottom: 16 }} />
+        <ActivityIndicator color="#10493C" style={{ marginBottom: 16 }} />
       ) : (
         <TouchableOpacity style={styles.setBtn} onPress={handleSetKnownLocation}>
           <Text style={styles.setBtnText}>Set Current Position as Known Location</Text>
@@ -130,7 +130,7 @@ export default function MyLocationScreen() {
       </View>
 
       {histFetching ? (
-        <ActivityIndicator color="#0078D4" style={{ marginTop: 20 }} />
+        <ActivityIndicator color="#10493C" style={{ marginTop: 20 }} />
       ) : (
         <FlatList
           data={history}
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   cardValue: { flex: 1, fontSize: 15, fontWeight: '600', color: '#111' },
   deleteLink: { fontSize: 13, color: '#ef4444' },
   setBtn: {
-    backgroundColor: '#0078D4',
+    backgroundColor: '#10493C',
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   navBtn: { padding: 8 },
-  navBtnText: { fontSize: 28, color: '#0078D4' },
+  navBtnText: { fontSize: 28, color: '#10493C' },
   dateLabel: { fontSize: 16, fontWeight: '600', color: '#111', minWidth: 120, textAlign: 'center' },
   historyRow: {
     backgroundColor: '#fff',

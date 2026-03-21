@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { requestDeviceCode, pollForToken } from '../services/authService';
 import { useAppStore } from '../store/appStore';
+import AkkuroLogo from '../components/AkkuroLogo';
 
 type Stage =
   | { kind: 'idle' }
@@ -50,7 +51,7 @@ export default function LoginScreen() {
     return (
       <View style={styles.container}>
         <Logo />
-        <ActivityIndicator size="large" color="#0078D4" />
+        <ActivityIndicator size="large" color="#10493C" />
         <Text style={styles.hint}>Requesting sign-in code…</Text>
       </View>
     );
@@ -75,7 +76,7 @@ export default function LoginScreen() {
             <Text style={styles.buttonText}>Open microsoft.com/devicelogin</Text>
           </TouchableOpacity>
         </View>
-        <ActivityIndicator size="small" color="#0078D4" />
+        <ActivityIndicator size="small" color="#10493C" />
         <Text style={styles.hint}>Waiting for you to sign in…</Text>
       </View>
     );
@@ -94,8 +95,7 @@ export default function LoginScreen() {
 function Logo() {
   return (
     <View style={styles.logoWrapper}>
-      <Text style={styles.logoText}>Falcon</Text>
-      <Text style={styles.subtitle}>Five Degrees</Text>
+      <AkkuroLogo width={206} height={36} />
     </View>
   );
 }
@@ -109,11 +109,9 @@ const styles = StyleSheet.create({
     gap: 24,
     padding: 32,
   },
-  logoWrapper: { alignItems: 'center' },
-  logoText: { fontSize: 48, fontWeight: '700', color: '#0078D4' },
-  subtitle: { fontSize: 16, color: '#555', marginTop: 4 },
+  logoWrapper: { alignItems: 'center', marginBottom: 8 },
   button: {
-    backgroundColor: '#0078D4',
+    backgroundColor: '#10493C',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 8,
@@ -133,7 +131,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   codeLabel: { fontSize: 14, color: '#666' },
-  codeUrl: { fontSize: 14, color: '#0078D4', fontWeight: '600' },
+  codeUrl: { fontSize: 14, color: '#10493C', fontWeight: '600' },
   userCode: {
     fontSize: 32,
     fontWeight: '700',

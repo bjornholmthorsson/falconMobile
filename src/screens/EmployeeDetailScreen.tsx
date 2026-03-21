@@ -80,7 +80,7 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
           {employee.mobilePhone && (
             <>
               <ActionButton label="Call" color="#22c55e" onPress={openPhone} />
-              <ActionButton label="SMS" color="#0078D4" onPress={openSms} />
+              <ActionButton label="SMS" color="#10493C" onPress={openSms} />
             </>
           )}
           <ActionButton label="Teams" color="#6264A7" onPress={openTeams} />
@@ -136,7 +136,7 @@ function presenceColor(availability: string): string {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   closeBtn: { padding: 16, alignItems: 'flex-end' },
-  closeBtnText: { fontSize: 16, color: '#0078D4', fontWeight: '600' },
+  closeBtnText: { fontSize: 16, color: '#10493C', fontWeight: '600' },
   header: {
     flexDirection: 'row',
     padding: 20,
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: { width: 72, height: 72, borderRadius: 36 },
-  avatarPlaceholder: { backgroundColor: '#0078D4', alignItems: 'center', justifyContent: 'center' },
+  avatarPlaceholder: { backgroundColor: '#10493C', alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { color: '#fff', fontWeight: '700', fontSize: 26 },
   headerText: { flex: 1 },
   name: { fontSize: 20, fontWeight: '700', color: '#111' },

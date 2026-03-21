@@ -46,7 +46,7 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0078D4" />
+        <ActivityIndicator size="large" color="#10493C" />
       </View>
     );
   }
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 15, color: '#555' },
-  retryBtn: { backgroundColor: '#0078D4', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
+  retryBtn: { backgroundColor: '#10493C', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
   header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#111' },
   card: {

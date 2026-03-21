@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { useAppStore } from '../store/appStore';
+import { HomeIcon, EmployeesIcon, AbsenceIcon, LocationIcon, ProfileIcon } from '../components/TabIcons';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -26,16 +27,14 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
-          const icons: Record<string, string> = {
-            Home: '🏠',
-            Employees: '👥',
-            Absence: '📅',
-            Location: '📍',
-            Profile: '👤',
-          };
-          return <Text style={{ fontSize: size - 4 }}>{icons[route.name] ?? '●'}</Text>;
+          if (route.name === 'Home') return <HomeIcon color={color} size={size} />;
+          if (route.name === 'Employees') return <EmployeesIcon color={color} size={size} />;
+          if (route.name === 'Absence') return <AbsenceIcon color={color} size={size} />;
+          if (route.name === 'Location') return <LocationIcon color={color} size={size} />;
+          if (route.name === 'Profile') return <ProfileIcon color={color} size={size} />;
+          return null;
         },
-        tabBarActiveTintColor: '#0078D4',
+        tabBarActiveTintColor: '#10493C',
         tabBarInactiveTintColor: '#9ca3af',
         headerShown: true,
       })}
@@ -69,7 +68,7 @@ export default function AppNavigator() {
   if (!authRestored) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' }}>
-        <ActivityIndicator size="large" color="#0078D4" />
+        <ActivityIndicator size="large" color="#10493C" />
       </View>
     );
   }

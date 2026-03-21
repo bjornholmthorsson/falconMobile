@@ -127,7 +127,7 @@ export default function RegisterAbsenceScreen() {
       />
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color="#0078D4" />
+        <ActivityIndicator style={styles.loader} size="large" color="#10493C" />
       ) : (
         <TouchableOpacity style={styles.submitBtn} onPress={handleRegister}>
           <Text style={styles.submitBtnText}>Register Absence</Text>
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  typeChipSelected: { backgroundColor: '#0078D4', borderColor: '#0078D4' },
+  typeChipSelected: { backgroundColor: '#10493C', borderColor: '#10493C' },
   typeChipText: { fontSize: 14, color: '#374151' },
   typeChipTextSelected: { color: '#fff', fontWeight: '600' },
   input: {
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   commentInput: { height: 80, textAlignVertical: 'top' },
   loader: { marginTop: 20 },
   submitBtn: {
-    backgroundColor: '#0078D4',
+    backgroundColor: '#10493C',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
