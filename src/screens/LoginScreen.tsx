@@ -6,25 +6,22 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  Image,
 } from 'react-native';
 import { signIn } from '../services/authService';
-import { getMe } from '../services/graphService';
 import { useAppStore } from '../store/appStore';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
-  const setCurrentUser = useAppStore(s => s.setCurrentUser);
+  const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
 
   async function handleSignIn() {
     setLoading(true);
     try {
       await signIn();
-      const me = await getMe();
-      setCurrentUser(me);
+      // Navigate immediately — user profile loads in background on HomeScreen
+      setIsAuthenticated(true);
     } catch (err: any) {
       Alert.alert('Sign in failed', err?.message ?? 'Unknown error');
-    } finally {
       setLoading(false);
     }
   }

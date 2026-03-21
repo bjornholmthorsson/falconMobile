@@ -19,9 +19,10 @@ import { signOut } from '../services/authService';
 import { useAppStore } from '../store/appStore';
 
 export default function ProfileScreen() {
-  const { currentUser, setCurrentUser } = useAppStore(s => ({
+  const { currentUser, setCurrentUser, setIsAuthenticated } = useAppStore(s => ({
     currentUser: s.currentUser,
     setCurrentUser: s.setCurrentUser,
+    setIsAuthenticated: s.setIsAuthenticated,
   }));
   const qc = useQueryClient();
 
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
         onPress: async () => {
           await signOut();
           setCurrentUser(null);
+          setIsAuthenticated(false);
         },
       },
     ]);

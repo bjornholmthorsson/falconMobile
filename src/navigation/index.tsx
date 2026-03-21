@@ -14,6 +14,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import MyLocationScreen from '../screens/MyLocationScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
+import { useLoadCurrentUser } from '../hooks/useLoadCurrentUser';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -60,13 +61,14 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const currentUser = useAppStore(s => s.currentUser);
+  const isAuthenticated = useAppStore(s => s.isAuthenticated);
   useLocationWatcher();
+  useLoadCurrentUser();
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
-        {currentUser == null ? (
+        {!isAuthenticated ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <Stack.Screen name="Main" component={MainTabs} />
