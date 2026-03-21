@@ -40,8 +40,9 @@ export default function LoginScreen() {
       setAuthRestored(true);
       setIsAuthenticated(true);
     } catch (err: any) {
-      Alert.alert('Sign in failed', err?.message ?? 'Unknown error');
-      setStage({ kind: 'idle' });
+      Alert.alert('Sign in failed', err?.message ?? 'Unknown error', [
+        { text: 'OK', onPress: () => setStage({ kind: 'idle' }) },
+      ]);
     }
   }
 

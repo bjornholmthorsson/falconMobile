@@ -56,7 +56,7 @@ export async function requestDeviceCode(): Promise<DeviceCodeInfo> {
     body: `client_id=${CLIENT_ID}&scope=${encodeURIComponent(SCOPES)}`,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description ?? 'Device code request failed');
+  if (!res.ok) throw new Error(data.error_description ?? data.error ?? JSON.stringify(data));
 
   return {
     userCode: data.user_code,
