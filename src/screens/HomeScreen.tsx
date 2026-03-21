@@ -15,12 +15,17 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/graphService';
 import { getUserAbsences } from '../services/api';
+import { signOut } from '../services/authService';
+import { useAppStore } from '../store/appStore';
 import type { OfficeSummary } from '../models';
 
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function HomeScreen() {
-  const { data, refetch, isRefetching, isLoading, isError } = useQuery<OfficeSummary[]>({
+  const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
+  const setCurrentUser = useAppStore(s => s.setCurrentUser);
+
+  const { data, refetch, isRefetching, isLoading, isError, error } = useQuery<OfficeSummary[]>({
     queryKey: ['officeSummaries'],
     queryFn: fetchAllOfficeSummaries,
     staleTime: 30_000,
@@ -32,6 +37,12 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, [refetch]);
 
+  async function handleSignOut() {
+    await signOut().catch(() => {});
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -41,12 +52,21 @@ export default function HomeScreen() {
   }
 
   if (isError) {
+    const isAuthError = (error as any)?.message === 'Not authenticated';
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Could not load office data.</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-          <Text style={styles.retryBtnText}>Retry</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorText}>
+          {isAuthError ? 'Session expired.' : 'Could not load office data.'}
+        </Text>
+        {isAuthError ? (
+          <TouchableOpacity style={styles.retryBtn} onPress={handleSignOut}>
+            <Text style={styles.retryBtnText}>Sign in again</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

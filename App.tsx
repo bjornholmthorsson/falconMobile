@@ -7,7 +7,7 @@ import AppNavigator from './src/navigation';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
+      retry: 0,
       refetchOnWindowFocus: false,
     },
   },
