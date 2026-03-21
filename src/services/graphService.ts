@@ -11,7 +11,7 @@ import { getAccessToken } from './authService';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
 // Offices to filter users by (value matches Graph user.city field)
-export const OFFICES = ['Amsterdam', 'Reykjavik', 'Akureyri', 'Lisbon'] as const;
+export const OFFICES = ['Amsterdam', 'Reykjavik', 'Ho Chi Minh City', 'Lisbon'] as const;
 export type Office = (typeof OFFICES)[number];
 
 const GRAPH_USER_FIELDS =
