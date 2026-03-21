@@ -38,13 +38,10 @@ export function useLoadCurrentUser() {
     fetchedRef.current = true;
     getMe()
       .then(user => setCurrentUser(user))
-      .catch(err => {
+      .catch(() => {
         fetchedRef.current = false;
-        // If tokens are invalid/expired, drop back to login
-        if (err?.message === 'Not authenticated') {
-          setIsAuthenticated(false);
-          setAuthRestored(true);
-        }
+        // Don't redirect to login — let the user stay on HomeScreen
+        // even if the profile load fails (non-critical background fetch)
       });
   }, [isAuthenticated, currentUser]);
 }
