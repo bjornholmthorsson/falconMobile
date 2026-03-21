@@ -1,4 +1,3 @@
-import axios from 'axios';
 import type {
   UserLocation,
   KnownLocation,
@@ -12,10 +11,39 @@ import type {
 const BASE_URL = 'https://fd-falcon.azurewebsites.net';
 const CODE = 'OahMqpTnWi6VHfSDH9bU442hVozo4Qksjl36mPsrcVKodK5NaHfFVQ==';
 
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 25000,
-});
+async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { signal });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body != null ? JSON.stringify(body) : undefined,
+    signal,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function apiPatch<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function apiDelete<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE', signal });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<T>;
+}
 
 // ── Location ────────────────────────────────────────────────────────────────
 
@@ -25,12 +53,11 @@ export async function postLocation(
   latitude: number,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const res = await api.post(
-    `/api/user/${userId}/location?long=${longitude}&lat=${latitude}&code=${CODE}`,
-    null,
-    { signal },
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/location?long=${longitude}&lat=${latitude}&code=${CODE}`,
+    { method: 'POST', signal },
   );
-  return res.status >= 200 && res.status < 300;
+  return res.ok;
 }
 
 export async function postKnownLocation(
@@ -39,54 +66,46 @@ export async function postKnownLocation(
   latitude: number,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const res = await api.post(
-    `/api/user/${userId}/known-location?code=${CODE}`,
-    { Longitude: longitude, Latitude: latitude },
-    { signal },
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/known-location?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Longitude: longitude, Latitude: latitude }),
+      signal,
+    },
   );
-  return res.status >= 200 && res.status < 300;
+  return res.ok;
 }
 
 export async function deleteKnownLocation(
   userId: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const res = await api.delete(
-    `/api/user/${userId}/known-location?code=${CODE}`,
-    { signal },
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/known-location?code=${CODE}`,
+    { method: 'DELETE', signal },
   );
-  return res.status >= 200 && res.status < 300;
+  return res.ok;
 }
 
 export async function getUserLocations(
   signal?: AbortSignal,
 ): Promise<UserLocation[]> {
-  const res = await api.get<UserLocation[]>(
-    `/api/user-locations?code=${CODE}`,
-    { signal },
-  );
-  return res.data;
+  return apiGet<UserLocation[]>(`/api/user-locations?code=${CODE}`, signal);
 }
 
 export async function getKnownLocations(
   signal?: AbortSignal,
 ): Promise<KnownLocation[]> {
-  const res = await api.get<KnownLocation[]>(
-    `/api/known-locations?code=${CODE}`,
-    { signal },
-  );
-  return res.data;
+  return apiGet<KnownLocation[]>(`/api/known-locations?code=${CODE}`, signal);
 }
 
 export async function getKnownUserLocations(
   userId: string,
   signal?: AbortSignal,
 ): Promise<KnownLocation[]> {
-  const res = await api.get<KnownLocation[]>(
-    `/api/user/${userId}/known-locations?code=${CODE}`,
-    { signal },
-  );
-  return res.data;
+  return apiGet<KnownLocation[]>(`/api/user/${userId}/known-locations?code=${CODE}`, signal);
 }
 
 export async function getUserHistory(
@@ -98,11 +117,11 @@ export async function getUserHistory(
     `${String(date.getDate()).padStart(2, '0')}-` +
     `${String(date.getMonth() + 1).padStart(2, '0')}-` +
     `${date.getFullYear()}`;
-  const res = await api.get<{ locations: HistoricalLocation[] }>(
+  const data = await apiGet<{ locations: HistoricalLocation[] }>(
     `/api/user/${userId}/history?date=${formatted}&code=${CODE}`,
-    { signal },
+    signal,
   );
-  return res.data?.locations ?? [];
+  return data?.locations ?? [];
 }
 
 // ── Absences ────────────────────────────────────────────────────────────────
@@ -112,12 +131,16 @@ export async function registerAbsence(
   payload: UserAbsenceRegistration,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const res = await api.post(
-    `/api/user/${username}/absence?code=${CODE}`,
-    payload,
-    { signal },
+  const res = await fetch(
+    `${BASE_URL}/api/user/${username}/absence?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    },
   );
-  return res.status >= 200 && res.status < 300;
+  return res.ok;
 }
 
 export async function getUserAbsences(
@@ -127,15 +150,13 @@ export async function getUserAbsences(
   let query = `?code=${CODE}`;
   if (opts.allDay) query += '&allDay=true';
   if (opts.userIds?.length) query += `&userids=${opts.userIds.join(',')}`;
-  const res = await api.get<UserAbsence[]>(`/api/user-absences${query}`, { signal });
-  return res.data;
+  return apiGet<UserAbsence[]>(`/api/user-absences${query}`, signal);
 }
 
 export async function getAbsenceTypes(
   signal?: AbortSignal,
 ): Promise<Absence[]> {
-  const res = await api.get<Absence[]>(`/api/absences?code=${CODE}`, { signal });
-  return res.data;
+  return apiGet<Absence[]>(`/api/absences?code=${CODE}`, signal);
 }
 
 // ── User Data ────────────────────────────────────────────────────────────────
@@ -146,8 +167,7 @@ export async function getUserData(
 ): Promise<UserData[]> {
   let query = `?code=${CODE}`;
   if (userIds?.length) query += `&userids=${userIds.join(',')}`;
-  const res = await api.get<UserData[]>(`/api/user-data${query}`, { signal });
-  return res.data;
+  return apiGet<UserData[]>(`/api/user-data${query}`, signal);
 }
 
 export async function getUserInformation(
@@ -155,8 +175,7 @@ export async function getUserInformation(
   signal?: AbortSignal,
 ): Promise<UserData[]> {
   const query = `?ids=${encodeURIComponent(userId)}&code=${CODE}`;
-  const res = await api.get<UserData[]>(`/api/user-information${query}`, { signal });
-  return res.data;
+  return apiGet<UserData[]>(`/api/user-information${query}`, signal);
 }
 
 export async function registerUserData(
@@ -164,10 +183,14 @@ export async function registerUserData(
   data: Partial<UserData>,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const res = await api.patch(
-    `/api/user/${userId}/information?code=${CODE}`,
-    data,
-    { signal },
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/information?code=${CODE}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      signal,
+    },
   );
-  return res.status >= 200 && res.status < 300;
+  return res.ok;
 }

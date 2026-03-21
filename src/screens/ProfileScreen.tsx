@@ -19,11 +19,9 @@ import { signOut } from '../services/authService';
 import { useAppStore } from '../store/appStore';
 
 export default function ProfileScreen() {
-  const { currentUser, setCurrentUser, setIsAuthenticated } = useAppStore(s => ({
-    currentUser: s.currentUser,
-    setCurrentUser: s.setCurrentUser,
-    setIsAuthenticated: s.setIsAuthenticated,
-  }));
+  const currentUser = useAppStore(s => s.currentUser);
+  const setCurrentUser = useAppStore(s => s.setCurrentUser);
+  const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
   const qc = useQueryClient();
 
   const { data: userData } = useQuery({
