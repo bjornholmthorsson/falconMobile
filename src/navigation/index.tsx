@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useAppStore } from '../store/appStore';
@@ -15,7 +15,7 @@ import MyLocationScreen from '../screens/MyLocationScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs() {
@@ -65,7 +65,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
         {currentUser == null ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
