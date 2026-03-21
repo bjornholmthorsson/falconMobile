@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Clipboard,
+  Linking,
 } from 'react-native';
 import { requestDeviceCode, pollForToken } from '../services/authService';
 import { useAppStore } from '../store/appStore';
@@ -59,15 +60,22 @@ export default function LoginScreen() {
       <View style={styles.container}>
         <Logo />
         <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>Enter this code at</Text>
-          <Text style={styles.codeUrl}>{stage.verificationUri}</Text>
+          <Text style={styles.codeLabel}>1. Copy this code:</Text>
           <TouchableOpacity onPress={() => Clipboard.setString(stage.userCode)}>
             <Text style={styles.userCode}>{stage.userCode}</Text>
           </TouchableOpacity>
-          <Text style={styles.hint}>Tap the code to copy it.{'\n'}The browser has been opened for you.</Text>
+          <Text style={styles.hint}>Tap the code to copy it</Text>
         </View>
-        <ActivityIndicator size="small" color="#0078D4" style={{ marginTop: 24 }} />
-        <Text style={styles.hint}>Waiting for you to authenticate…</Text>
+        <View style={styles.codeCard}>
+          <Text style={styles.codeLabel}>2. Open the browser and sign in:</Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => Linking.openURL(stage.verificationUri)}>
+            <Text style={styles.buttonText}>Open microsoft.com/devicelogin</Text>
+          </TouchableOpacity>
+        </View>
+        <ActivityIndicator size="small" color="#0078D4" />
+        <Text style={styles.hint}>Waiting for you to sign in…</Text>
       </View>
     );
   }

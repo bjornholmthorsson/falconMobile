@@ -11,7 +11,6 @@
  *   3. Poll /token every ~5 s until the user completes login in the browser
  *   4. Store tokens in memory; refresh automatically before expiry
  */
-import { Linking } from 'react-native';
 
 const CLIENT_ID = '3639c730-2334-44d6-9350-1cb2748da8d8';
 const TENANT_ID = 'common';
@@ -58,10 +57,6 @@ export async function requestDeviceCode(): Promise<DeviceCodeInfo> {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description ?? 'Device code request failed');
-
-  // Open the browser so the user can authenticate
-  const url = data.verification_uri_complete ?? data.verification_uri;
-  await Linking.openURL(url);
 
   return {
     userCode: data.user_code,
