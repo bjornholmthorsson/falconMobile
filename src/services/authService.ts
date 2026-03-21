@@ -63,7 +63,7 @@ export async function signOut(): Promise<void> {
       // ignore revocation errors
     }
   }
-  await Promise.all(Object.values(STORAGE_KEYS).map(k => AsyncStorage.removeItem(k)));
+  await clearStoredTokens();
 }
 
 export async function getAccessToken(): Promise<string> {
@@ -77,14 +77,23 @@ export async function getAccessToken(): Promise<string> {
 
   // Refresh if within 5 minutes of expiry
   if (expiry && Date.now() > new Date(expiry).getTime() - 5 * 60 * 1000) {
-    if (!refreshToken) throw new Error('Refresh token unavailable');
-    const result = await refresh(AUTH_CONFIG, { refreshToken });
-    await storeTokens(
-      result.accessToken,
-      result.refreshToken ?? refreshToken,
-      result.accessTokenExpirationDate,
-    );
-    return result.accessToken;
+    if (!refreshToken) {
+      await clearStoredTokens();
+      throw new Error('Not authenticated');
+    }
+    try {
+      const result = await refresh(AUTH_CONFIG, { refreshToken });
+      await storeTokens(
+        result.accessToken,
+        result.refreshToken ?? refreshToken,
+        result.accessTokenExpirationDate,
+      );
+      return result.accessToken;
+    } catch {
+      // Refresh token is expired or invalid — clear everything and force re-login
+      await clearStoredTokens();
+      throw new Error('Not authenticated');
+    }
   }
 
   return token;
@@ -96,6 +105,10 @@ export async function isSignedIn(): Promise<boolean> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function clearStoredTokens(): Promise<void> {
+  await Promise.all(Object.values(STORAGE_KEYS).map(k => AsyncStorage.removeItem(k)));
+}
 
 async function storeTokens(
   accessToken: string,

@@ -10,6 +10,7 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/graphService';
@@ -19,7 +20,7 @@ import type { OfficeSummary } from '../models';
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function HomeScreen() {
-  const { data, refetch, isRefetching } = useQuery<OfficeSummary[]>({
+  const { data, refetch, isRefetching, isLoading, isError } = useQuery<OfficeSummary[]>({
     queryKey: ['officeSummaries'],
     queryFn: fetchAllOfficeSummaries,
     staleTime: 30_000,
@@ -30,6 +31,25 @@ export default function HomeScreen() {
     const id = setInterval(refetch, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [refetch]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#0078D4" />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Could not load office data.</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -127,6 +147,10 @@ async function fetchAllOfficeSummaries(): Promise<OfficeSummary[]> {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  errorText: { fontSize: 15, color: '#555' },
+  retryBtn: { backgroundColor: '#0078D4', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
+  retryBtnText: { color: '#fff', fontWeight: '600' },
   header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#111' },
   card: {
     backgroundColor: '#fff',

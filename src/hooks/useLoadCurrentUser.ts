@@ -20,10 +20,12 @@ export function useLoadCurrentUser() {
     if (restoredRef.current) return;
     restoredRef.current = true;
     if (!isAuthenticated) {
-      isSignedIn().then(signed => {
-        if (signed) setIsAuthenticated(true);
-        setAuthRestored(true);
-      });
+      isSignedIn()
+        .then(signed => {
+          if (signed) setIsAuthenticated(true);
+        })
+        .catch(() => {/* storage error — treat as signed out */})
+        .finally(() => setAuthRestored(true));
     } else {
       setAuthRestored(true);
     }
@@ -36,6 +38,13 @@ export function useLoadCurrentUser() {
     fetchedRef.current = true;
     getMe()
       .then(user => setCurrentUser(user))
-      .catch(() => { fetchedRef.current = false; }); // allow retry on error
+      .catch(err => {
+        fetchedRef.current = false;
+        // If tokens are invalid/expired, drop back to login
+        if (err?.message === 'Not authenticated') {
+          setIsAuthenticated(false);
+          setAuthRestored(true);
+        }
+      });
   }, [isAuthenticated, currentUser]);
 }
