@@ -125,6 +125,16 @@ function Bar({
 }
 
 async function fetchAllOfficeSummaries(): Promise<OfficeSummary[]> {
+  return Promise.race([doFetch(), hardTimeout(12_000)]);
+}
+
+function hardTimeout(ms: number): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Request timed out')), ms),
+  );
+}
+
+async function doFetch(): Promise<OfficeSummary[]> {
   const results = await Promise.allSettled(
     OFFICES.map(async office => {
       const users = await getUsersByOffice(office);
