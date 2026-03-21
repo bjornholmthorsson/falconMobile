@@ -1,16 +1,14 @@
 /**
  * Microsoft Graph API service.
  *
- * Auth tokens are supplied by AuthService via getAccessToken().
- * Every method that talks to Graph takes an optional AbortSignal so callers
- * can cancel in-flight requests when a screen unmounts.
+ * Uses the native fetch API (not axios) — axios uses XMLHttpRequest which
+ * blocks the JS thread on iOS New Architecture (Bridgeless/Fabric).
+ * fetch is implemented natively and runs fully off-thread.
  */
-import axios from 'axios';
 import type { User, TeamsPresence } from '../models';
 import { getAccessToken } from './authService';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-const TIMEOUT_MS = 15_000;
 
 // Offices to filter users by (value matches Graph user.city field)
 export const OFFICES = ['Amsterdam', 'Reykjavik', 'Akureyri', 'Lisbon'] as const;
@@ -21,12 +19,12 @@ const GRAPH_USER_FIELDS =
 
 async function graphGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const token = await getAccessToken();
-  const res = await axios.get<T>(`${GRAPH}${path}`, {
+  const res = await fetch(`${GRAPH}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
-    timeout: TIMEOUT_MS,
   });
-  return res.data;
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
 async function graphPost<T>(
@@ -35,12 +33,17 @@ async function graphPost<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const token = await getAccessToken();
-  const res = await axios.post<T>(`${GRAPH}${path}`, body, {
-    headers: { Authorization: `Bearer ${token}` },
+  const res = await fetch(`${GRAPH}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
     signal,
-    timeout: TIMEOUT_MS,
   });
-  return res.data;
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
 async function graphPatch(
@@ -49,11 +52,16 @@ async function graphPatch(
   signal?: AbortSignal,
 ): Promise<void> {
   const token = await getAccessToken();
-  await axios.patch(`${GRAPH}${path}`, body, {
-    headers: { Authorization: `Bearer ${token}` },
+  const res = await fetch(`${GRAPH}${path}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
     signal,
-    timeout: TIMEOUT_MS,
   });
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
 }
 
 // ── Current user ─────────────────────────────────────────────────────────────
@@ -134,19 +142,18 @@ export async function getUserPhoto(
 ): Promise<string | null> {
   try {
     const token = await getAccessToken();
-    const res = await axios.get(
+    const res = await fetch(
       `${GRAPH}/users/${userPrincipalName}/photo/$value`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'arraybuffer' as const,
-        signal,
-      },
+      { headers: { Authorization: `Bearer ${token}` }, signal },
     );
-    const bytes = new Uint8Array(res.data as ArrayBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    return `data:image/jpeg;base64,${base64}`;
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
   } catch {
     return null;
   }
@@ -163,7 +170,6 @@ export async function sendAbsenceNotification(
   comment: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  // Create a 1:1 chat with the supervisor
   const chat = await graphPost<{ id: string }>(
     `/users/${SUPERVISOR_UPN}/chats`,
     { chatType: 'oneOnOne', topic: 'Absence Registered' },
