@@ -2,7 +2,7 @@
  * EmployeesScreen — employee list with search, pull-to-refresh, presence, absence.
  * Auto-refreshes every 60 seconds (matching Xamarin timer).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -45,12 +45,12 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return employees ?? [];
+    if (!q) return (employees ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
     return (employees ?? []).filter(
       e =>
         e.name.toLowerCase().includes(q) ||
         (e.title ?? '').toLowerCase().includes(q),
-    );
+    ).sort((a, b) => a.name.localeCompare(b.name));
   }, [employees, search]);
 
   return (
@@ -83,11 +83,17 @@ function EmployeeRow({
   employee: Employee;
   onPress: () => void;
 }) {
+  const { data: photo } = useQuery({
+    queryKey: ['photo', employee.userId],
+    queryFn: () => getUserPhoto(employee.userId),
+    staleTime: 5 * 60 * 1000,
+  });
+
   return (
     <TouchableOpacity style={styles.row} onPress={onPress}>
       <PresenceDot status={employee.teamsAvailability} />
-      {employee.photo ? (
-        <Image source={{ uri: employee.photo }} style={styles.avatar} />
+      {photo ? (
+        <Image source={{ uri: photo }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
           <Text style={styles.avatarInitials}>
@@ -208,7 +214,7 @@ function mapTeamsStatus(availability?: string) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#10493C' },
   search: {
     margin: 12,
     padding: 10,

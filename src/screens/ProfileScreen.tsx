@@ -150,8 +150,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
-  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#111' },
+  container: { flex: 1, backgroundColor: '#10493C', padding: 16 },
+  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#fff' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -195,9 +195,8 @@ const styles = StyleSheet.create({
     margin: 16,
     padding: 14,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ef4444',
+    backgroundColor: '#ef4444',
     alignItems: 'center',
   },
-  signOutText: { color: '#ef4444', fontWeight: '600', fontSize: 15 },
+  signOutText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 });

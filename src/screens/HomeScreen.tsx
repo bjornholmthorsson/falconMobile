@@ -184,12 +184,12 @@ async function doFetch(): Promise<OfficeSummary[]> {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  container: { flex: 1, backgroundColor: '#10493C', padding: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 15, color: '#555' },
   retryBtn: { backgroundColor: '#10493C', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
-  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#111' },
+  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#fff' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,
