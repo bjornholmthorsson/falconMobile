@@ -149,7 +149,10 @@ async function fetchAllEmployees(): Promise<Employee[]> {
     }
   }
 
-  const activeUsers = [...userMap.values()].filter(({ user }) => user.accountEnabled);
+  const EXCLUDED_NAME_PATTERNS = /meeting room|phone booth|admin/i;
+  const activeUsers = [...userMap.values()].filter(
+    ({ user }) => user.accountEnabled && !EXCLUDED_NAME_PATTERNS.test(user.displayName),
+  );
   const ids = activeUsers.map(({ user }) => user.id);
   const presences = ids.length ? await getPresenceForUsers(ids) : [];
 
