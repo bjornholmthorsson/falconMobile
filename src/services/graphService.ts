@@ -23,7 +23,7 @@ const OFFICE_CITY_MAP: Record<string, string[]> = {
 };
 
 const GRAPH_USER_FIELDS =
-  'id,displayName,mobilePhone,mail,jobTitle,accountEnabled,userPrincipalName,officeLocation';
+  'id,displayName,mobilePhone,businessPhones,mail,jobTitle,department,accountEnabled,userPrincipalName,officeLocation';
 
 async function graphGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const token = await getAccessToken();
@@ -31,7 +31,10 @@ async function graphGet<T>(path: string, signal?: AbortSignal): Promise<T> {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });
-  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -50,7 +53,10 @@ async function graphPost<T>(
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -69,7 +75,10 @@ async function graphPatch(
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
+  }
 }
 
 // ── Current user ─────────────────────────────────────────────────────────────
@@ -101,7 +110,10 @@ export async function getUsersByOffice(
       headers: { Authorization: `Bearer ${token}` },
       signal,
     });
-    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
+  }
     const data = await res.json();
     all.push(...(data.value ?? []));
     url = data['@odata.nextLink'] ?? null;
@@ -190,20 +202,37 @@ export async function sendAbsenceNotification(
   from: Date,
   to: Date,
   comment: string,
+  currentUserId: string,
   signal?: AbortSignal,
 ): Promise<void> {
+  // Create (or reuse) a 1:1 chat between the signed-in user and the supervisor.
   const chat = await graphPost<{ id: string }>(
-    `/users/${SUPERVISOR_UPN}/chats`,
-    { chatType: 'oneOnOne', topic: 'Absence Registered' },
+    `/chats`,
+    {
+      chatType: 'oneOnOne',
+      members: [
+        {
+          '@odata.type': '#microsoft.graph.aadUserConversationMember',
+          roles: ['owner'],
+          'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${currentUserId}`,
+        },
+        {
+          '@odata.type': '#microsoft.graph.aadUserConversationMember',
+          roles: ['owner'],
+          'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${SUPERVISOR_UPN}`,
+        },
+      ],
+    },
     signal,
   );
+
   const body =
-    `[Absence Registration]: ${absenceKey} -> ` +
-    `${from.toLocaleString()} - ${to.toLocaleString()}` +
-    (comment ? ` <br /> ${comment}` : '');
+    `[Absence Registration]: ${absenceKey} → ` +
+    `${from.toLocaleString()} – ${to.toLocaleString()}` +
+    (comment ? `<br />${comment}` : '');
 
   await graphPost(
-    `/users/${SUPERVISOR_UPN}/chats/${chat.id}/messages`,
+    `/chats/${chat.id}/messages`,
     { body: { contentType: 'html', content: body } },
     signal,
   );
@@ -218,7 +247,9 @@ function mapUser(d: any): User {
     jobTitle: d.jobTitle ?? null,
     userPrincipalName: d.userPrincipalName ?? '',
     mobilePhone: d.mobilePhone ?? null,
+    businessPhone: d.businessPhones?.[0] ?? null,
     officeLocation: d.officeLocation ?? null,
+    department: d.department ?? null,
     emailAddress: d.mail ?? null,
     managerId: null,
     accountEnabled: d.accountEnabled ?? true,

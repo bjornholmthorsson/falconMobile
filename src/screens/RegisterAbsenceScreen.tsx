@@ -15,12 +15,21 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import { getAbsenceTypes, registerAbsence } from '../services/api';
 import { sendAbsenceNotification } from '../services/graphService';
 import { useAppStore } from '../store/appStore';
 import type { Absence } from '../models';
+
+// Fallback types used when the API returns nothing
+const FALLBACK_ABSENCE_TYPES: Absence[] = [
+  { id: '1', absenceKey: 'HOLIDAY',   name: 'Holiday',    entryDate: '', entryBy: '' },
+  { id: '2', absenceKey: 'SICK',      name: 'Sick Leave', entryDate: '', entryBy: '' },
+  { id: '3', absenceKey: 'SICK_CHILD',name: 'Sick Child', entryDate: '', entryBy: '' },
+  { id: '4', absenceKey: 'DOCTOR',    name: 'Doctor',     entryDate: '', entryBy: '' },
+  { id: '5', absenceKey: 'OTHER',     name: 'Other',      entryDate: '', entryBy: '' },
+];
 
 // ── DateTimeField ─────────────────────────────────────────────────────────────
 
@@ -49,12 +58,7 @@ function DateTimeField({
   const [androidStep, setAndroidStep] = useState<'date' | 'time'>('date');
   const [tempDate, setTempDate] = useState(value);
 
-  function handleAndroid(event: DateTimePickerEvent, selected?: Date) {
-    if (event.type === 'dismissed') {
-      setOpen(false);
-      return;
-    }
-    const picked = selected ?? tempDate;
+  function handleAndroid(_event: unknown, picked: Date) {
     if (androidStep === 'date') {
       setTempDate(picked);
       setAndroidStep('time');
@@ -65,8 +69,8 @@ function DateTimeField({
     }
   }
 
-  function handleIOS(event: DateTimePickerEvent, selected?: Date) {
-    if (selected) setTempDate(selected);
+  function handleIOS(_event: unknown, selected: Date) {
+    setTempDate(selected);
   }
 
   function confirmIOS() {
@@ -95,7 +99,8 @@ function DateTimeField({
           mode={androidStep}
           display="default"
           minimumDate={androidStep === 'date' ? minimumDate : undefined}
-          onChange={handleAndroid}
+          onValueChange={handleAndroid}
+          onDismiss={() => setOpen(false)}
         />
       )}
 
@@ -118,7 +123,7 @@ function DateTimeField({
                 mode="datetime"
                 display="inline"
                 minimumDate={minimumDate}
-                onChange={handleIOS}
+                onValueChange={handleIOS}
                 themeVariant="light"
                 accentColor="#10493C"
               />
@@ -187,11 +192,12 @@ function defaultTo(): Date {
 
 export default function RegisterAbsenceScreen() {
   const currentUser = useAppStore(s => s.currentUser);
-  const { data: absenceTypes = [] } = useQuery<Absence[]>({
+  const { data: absenceTypesRaw = [] } = useQuery<Absence[]>({
     queryKey: ['absenceTypes'],
-    queryFn: () => getAbsenceTypes(),
+    queryFn: () => getAbsenceTypes().catch(() => []),
     staleTime: Infinity,
   });
+  const absenceTypes = absenceTypesRaw.length > 0 ? absenceTypesRaw : FALLBACK_ABSENCE_TYPES;
 
   const [selectedType, setSelectedType] = useState<Absence | null>(null);
   const [fromDate, setFromDate] = useState<Date>(defaultFrom);
@@ -225,9 +231,20 @@ export default function RegisterAbsenceScreen() {
         comment,
       });
 
-      await sendAbsenceNotification(selectedType.absenceKey, fromDate, toDate, comment);
+      let notified = true;
+      try {
+        await sendAbsenceNotification(selectedType.absenceKey, fromDate, toDate, comment, currentUser.id);
+      } catch (notifyErr: any) {
+        console.warn('Teams notification failed:', notifyErr?.message);
+        notified = false;
+      }
 
-      Alert.alert('Registered', 'Absence has been registered and supervisor notified.');
+      Alert.alert(
+        'Registered',
+        notified
+          ? 'Absence has been registered and supervisor notified.'
+          : 'Absence has been registered. (Supervisor notification could not be sent.)',
+      );
       setSelectedType(null);
       setFromDate(defaultFrom());
       setToDate(defaultTo());

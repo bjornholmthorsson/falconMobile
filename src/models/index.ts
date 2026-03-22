@@ -4,7 +4,9 @@ export interface User {
   jobTitle: string | null;
   userPrincipalName: string;
   mobilePhone: string | null;
+  businessPhone: string | null;
   officeLocation: string | null;
+  department: string | null;
   emailAddress: string | null;
   managerId: string | null;
   accountEnabled: boolean;

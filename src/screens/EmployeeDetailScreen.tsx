@@ -13,6 +13,8 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { getUserPhoto } from '../services/graphService';
 import type { Employee } from '../models';
 
 type Props = {
@@ -22,6 +24,13 @@ type Props = {
 };
 
 export default function EmployeeDetailScreen({ employee, visible, onClose }: Props) {
+  const { data: photo } = useQuery({
+    queryKey: ['photo', employee?.userId],
+    queryFn: () => getUserPhoto(employee!.userId),
+    enabled: !!employee && visible,
+    staleTime: 5 * 60 * 1000,
+  });
+
   if (!employee) return null;
 
   function openPhone() {
@@ -44,8 +53,8 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
         </TouchableOpacity>
 
         <View style={styles.header}>
-          {employee.photo ? (
-            <Image source={{ uri: employee.photo }} style={styles.avatar} />
+          {photo ? (
+            <Image source={{ uri: photo }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
               <Text style={styles.avatarInitials}>

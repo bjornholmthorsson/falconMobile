@@ -11,9 +11,10 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMe, updateUser } from '../services/graphService';
+import { getMe, updateUser, getUserPhoto } from '../services/graphService';
 import { getUserData, registerUserData } from '../services/api';
 import { signOut } from '../services/authService';
 import { useAppStore } from '../store/appStore';
@@ -28,6 +29,13 @@ export default function ProfileScreen() {
     queryKey: ['userData', currentUser?.id],
     queryFn: () => getUserData([currentUser!.id]),
     enabled: !!currentUser,
+  });
+
+  const { data: photo } = useQuery({
+    queryKey: ['photo', currentUser?.userPrincipalName],
+    queryFn: () => getUserPhoto(currentUser!.userPrincipalName),
+    enabled: !!currentUser,
+    staleTime: 5 * 60 * 1000,
   });
 
   const [mobile, setMobile] = useState(currentUser?.mobilePhone ?? '');
@@ -72,10 +80,28 @@ export default function ProfileScreen() {
       <Text style={styles.header}>My Profile</Text>
 
       <View style={styles.card}>
+        {photo ? (
+          <Image source={{ uri: photo }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarPlaceholder]}>
+            <Text style={styles.avatarInitials}>
+              {currentUser?.displayName?.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+            </Text>
+          </View>
+        )}
         <Text style={styles.displayName}>{currentUser?.displayName}</Text>
         <Text style={styles.upn}>{currentUser?.userPrincipalName}</Text>
         {currentUser?.jobTitle && (
           <Text style={styles.jobTitle}>{currentUser.jobTitle}</Text>
+        )}
+        {currentUser?.department && (
+          <Text style={styles.cardMeta}>{currentUser.department}</Text>
+        )}
+        {currentUser?.officeLocation && (
+          <Text style={styles.cardMeta}>{currentUser.officeLocation}</Text>
+        )}
+        {currentUser?.businessPhone && (
+          <Text style={styles.cardMeta}>{currentUser.businessPhone}</Text>
         )}
       </View>
 
@@ -133,9 +159,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: 'center',
   },
+  avatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },
+  avatarPlaceholder: { backgroundColor: '#10493C', alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { color: '#fff', fontSize: 28, fontWeight: '700' },
   displayName: { fontSize: 20, fontWeight: '700', color: '#111', marginBottom: 4 },
   upn: { fontSize: 13, color: '#666', marginBottom: 4 },
   jobTitle: { fontSize: 14, color: '#10493C' },
+  cardMeta: { fontSize: 13, color: '#888', marginTop: 3 },
   section: {
     backgroundColor: '#fff',
     borderRadius: 10,
