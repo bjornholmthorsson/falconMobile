@@ -18,9 +18,9 @@ import {
   getUsersByOffice,
   getPresenceForUsers,
   getUserPhoto,
+  OFFICES,
 } from '../services/graphService';
 import { getUserAbsences, getUserLocations } from '../services/api';
-import { useAppStore } from '../store/appStore';
 import type { Employee, User, TeamsPresence, UserAbsence, UserLocation } from '../models';
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -30,12 +30,11 @@ type Props = {
 };
 
 export default function EmployeesScreen({ onSelectEmployee }: Props) {
-  const selectedOffice = useAppStore(s => s.selectedOffice);
   const [search, setSearch] = useState('');
 
   const { data: employees, refetch, isRefetching } = useQuery<Employee[]>({
-    queryKey: ['employees', selectedOffice],
-    queryFn: () => fetchEmployees(selectedOffice),
+    queryKey: ['employees', 'all'],
+    queryFn: fetchAllEmployees,
     staleTime: 30_000,
   });
 
@@ -130,23 +129,37 @@ function presenceColor(availability: string): string {
   }
 }
 
-async function fetchEmployees(office: string): Promise<Employee[]> {
-  const [users, absences, locations] = await Promise.all([
-    getUsersByOffice(office),
-    getUserAbsences(),
-    getUserLocations(),
+async function fetchAllEmployees(): Promise<Employee[]> {
+  // Fetch users from all offices in parallel, plus shared supporting data
+  const [officeResults, absences, locations] = await Promise.all([
+    Promise.allSettled(OFFICES.map(office => getUsersByOffice(office).then(users => ({ office, users })))),
+    getUserAbsences().catch(() => [] as UserAbsence[]),
+    getUserLocations().catch(() => [] as UserLocation[]),
   ]);
 
-  const activeUsers = users.filter(u => u.accountEnabled);
-  const ids = activeUsers.map(u => u.id);
+  // Merge all users, deduplicating by id
+  const userMap = new Map<string, { user: User; office: string }>();
+  for (const result of officeResults) {
+    if (result.status === 'fulfilled') {
+      for (const user of result.value.users) {
+        if (!userMap.has(user.id)) {
+          userMap.set(user.id, { user, office: result.value.office });
+        }
+      }
+    }
+  }
+
+  const activeUsers = [...userMap.values()].filter(({ user }) => user.accountEnabled);
+  const ids = activeUsers.map(({ user }) => user.id);
   const presences = ids.length ? await getPresenceForUsers(ids) : [];
+
   const presenceMap = new Map<string, TeamsPresence>(presences.map(p => [p.id, p]));
   const absenceMap = new Map<string, UserAbsence>();
   for (const a of absences) absenceMap.set(a.userId, a);
   const locationMap = new Map<string, UserLocation>();
   for (const l of locations) locationMap.set(l.username, l);
 
-  return activeUsers.map(u => {
+  return activeUsers.map(({ user: u, office }) => {
     const presence = presenceMap.get(u.id);
     const absence = absenceMap.get(u.id);
     const loc = locationMap.get(u.userPrincipalName);

@@ -10,9 +10,17 @@ import { getAccessToken } from './authService';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
-// Offices to filter users by (value matches Graph user.city field)
-export const OFFICES = ['Amsterdam', 'Reykjavik', 'Ho Chi Minh City', 'Lisbon'] as const;
+// Display names shown in the app
+export const OFFICES = ['Amsterdam', 'Reykjavik', 'Ho Chi Minh', 'Lisbon'] as const;
 export type Office = (typeof OFFICES)[number];
+
+// Maps display name → actual city values used in Azure AD (Graph user.city field)
+const OFFICE_CITY_MAP: Record<string, string[]> = {
+  Amsterdam: ['Amsterdam'],
+  Reykjavik: ['Reykjavik', 'Kopavogur'],
+  'Ho Chi Minh': ['Ho Chi Minh'],
+  Lisbon: ['Lisbon'],
+};
 
 const GRAPH_USER_FIELDS =
   'id,displayName,mobilePhone,mail,jobTitle,accountEnabled,userPrincipalName,officeLocation';
@@ -80,12 +88,26 @@ export async function getUsersByOffice(
   office: string,
   signal?: AbortSignal,
 ): Promise<User[]> {
-  const filter = encodeURIComponent(`city eq '${office}'`);
-  const data = await graphGet<{ value: any[] }>(
-    `/users?$filter=${filter}&$select=${GRAPH_USER_FIELDS}`,
-    signal,
-  );
-  return (data.value ?? []).map(mapUser);
+  const cities = OFFICE_CITY_MAP[office] ?? [office];
+  const filterExpr = cities.map(c => `city eq '${c}'`).join(' or ');
+  const filter = encodeURIComponent(filterExpr);
+  let url: string | null =
+    `${GRAPH}/users?$filter=${filter}&$select=${GRAPH_USER_FIELDS}&$top=999`;
+  const all: any[] = [];
+
+  while (url) {
+    const token = await getAccessToken();
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    const data = await res.json();
+    all.push(...(data.value ?? []));
+    url = data['@odata.nextLink'] ?? null;
+  }
+
+  return all.map(mapUser);
 }
 
 export async function getUser(

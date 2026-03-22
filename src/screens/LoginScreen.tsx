@@ -21,7 +21,6 @@ export default function LoginScreen() {
       await signIn();
       setIsAuthenticated(true);
     } catch (err: any) {
-      // User cancelled — don't show an error
       if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) {
         return;
       }
@@ -33,16 +32,22 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.logoWrapper}>
-        <AkkuroLogo width={206} height={36} />
+      {/* Content sits above the vertical centre */}
+      <View style={styles.content}>
+        <Text style={styles.appName}>Akkuro Mobile</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#10493C" />
+        ) : (
+          <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+            <Text style={styles.buttonText}>Sign in</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      {loading ? (
-        <ActivityIndicator size="large" color="#10493C" />
-      ) : (
-        <TouchableOpacity style={styles.button} onPress={handleSignIn}>
-          <Text style={styles.buttonText}>Sign in with Microsoft</Text>
-        </TouchableOpacity>
-      )}
+
+      {/* Logo pinned to the bottom */}
+      <View style={styles.logoContainer}>
+        <AkkuroLogo width={150} height={27} />
+      </View>
     </View>
   );
 }
@@ -53,15 +58,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
-    padding: 32,
   },
-  logoWrapper: { alignItems: 'center', marginBottom: 8 },
+  content: {
+    alignItems: 'center',
+    gap: 28,
+    marginBottom: 80,
+  },
+  appName: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: '#10493C',
+    letterSpacing: 0.5,
+  },
   button: {
     backgroundColor: '#10493C',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
+    paddingHorizontal: 40,
+    paddingVertical: 11,
     borderRadius: 8,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  logoContainer: {
+    position: 'absolute',
+    bottom: 48,
+    alignItems: 'center',
+  },
 });
