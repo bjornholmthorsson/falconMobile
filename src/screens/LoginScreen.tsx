@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { signIn } from '../services/authService';
 import { useAppStore } from '../store/appStore';
@@ -34,6 +35,11 @@ export default function LoginScreen() {
     <View style={styles.container}>
       {/* Content sits above the vertical centre */}
       <View style={styles.content}>
+        <Image
+          source={require('../assets/images/login-hero.webp')}
+          style={styles.heroImage}
+          resizeMode="contain"
+        />
         <Text style={styles.appName}>Akkuro Mobile</Text>
         {loading ? (
           <ActivityIndicator size="large" color="#10493C" />
@@ -61,8 +67,12 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    gap: 28,
+    gap: 20,
     marginBottom: 80,
+  },
+  heroImage: {
+    width: 280,
+    height: 280,
   },
   appName: {
     fontSize: 34,
