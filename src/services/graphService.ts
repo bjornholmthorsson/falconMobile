@@ -106,17 +106,17 @@ export async function getUsersByOffice(
 
   while (url) {
     const token = await getAccessToken();
-    const res = await fetch(url, {
+    const pageRes: Response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
       signal,
     });
-    if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
-  }
-    const data = await res.json();
-    all.push(...(data.value ?? []));
-    url = data['@odata.nextLink'] ?? null;
+    if (!pageRes.ok) {
+      const detail = await pageRes.json().catch(() => ({}));
+      throw new Error(`Graph ${pageRes.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
+    }
+    const pageData: any = await pageRes.json();
+    all.push(...(pageData.value ?? []));
+    url = pageData['@odata.nextLink'] ?? null;
   }
 
   return all.map(mapUser);
