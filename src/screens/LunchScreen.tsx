@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function EventsScreen() {
+export default function LunchScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Events</Text>
+      <Text style={styles.header}>Lunch</Text>
       <View style={styles.card} />
     </View>
   );

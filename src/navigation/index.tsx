@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, ActivityIndicator } from 'react-native';
 import { useAppStore } from '../store/appStore';
-import { HomeIcon, EmployeesIcon, AbsenceIcon, LocationIcon, ProfileIcon, EventsIcon } from '../components/TabIcons';
+import { HomeIcon, EmployeesIcon, AbsenceIcon, LocationIcon, ProfileIcon, LunchIcon } from '../components/TabIcons';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -12,7 +12,7 @@ import EmployeesScreen from '../screens/EmployeesScreen';
 import EmployeeDetailScreen from '../screens/EmployeeDetailScreen';
 import RegisterAbsenceScreen from '../screens/RegisterAbsenceScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import EventsScreen from '../screens/EventsScreen';
+import LunchScreen from '../screens/LunchScreen';
 import MyLocationScreen from '../screens/MyLocationScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
@@ -32,7 +32,7 @@ function MainTabs() {
           if (route.name === 'Employees') return <EmployeesIcon color={color} size={size} />;
           if (route.name === 'Absence') return <AbsenceIcon color={color} size={size} />;
           if (route.name === 'Location') return <LocationIcon color={color} size={size} />;
-          if (route.name === 'Events') return <EventsIcon color={color} size={size} />;
+          if (route.name === 'Lunch') return <LunchIcon color={color} size={size} />;
           if (route.name === 'Profile') return <ProfileIcon color={color} size={size} />;
           return null;
         },
@@ -56,7 +56,7 @@ function MainTabs() {
       </Tab.Screen>
       <Tab.Screen name="Absence" component={RegisterAbsenceScreen} />
       <Tab.Screen name="Location" component={MyLocationScreen} />
-      <Tab.Screen name="Events" component={EventsScreen} />
+      <Tab.Screen name="Lunch" component={LunchScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
