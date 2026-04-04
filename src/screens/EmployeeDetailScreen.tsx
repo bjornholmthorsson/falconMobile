@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getUserPhoto } from '../services/graphService';
-import type { Employee } from '../models';
+import { getUserInformation } from '../services/api';
+import type { Employee, UserData } from '../models';
 
 type Props = {
   employee: Employee | null;
@@ -27,6 +28,16 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
   const { data: photo } = useQuery({
     queryKey: ['photo', employee?.userId],
     queryFn: () => getUserPhoto(employee!.userId),
+    enabled: !!employee && visible,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: userData } = useQuery<UserData | null>({
+    queryKey: ['userData', employee?.userId],
+    queryFn: async () => {
+      const results = await getUserInformation(employee!.userId);
+      return results[0] ?? null;
+    },
     enabled: !!employee && visible,
     staleTime: 5 * 60 * 1000,
   });
@@ -73,9 +84,25 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
         </View>
 
         <View style={styles.section}>
-          <DetailRow label="Location" value={employee.lastKnownLocation || employee.location} />
+          <DetailRow
+            label="Location"
+            value={
+              employee.lastKnownLocation
+                ? formatLocationSince(employee.lastKnownLocation, employee.locationChanged)
+                : employee.location
+            }
+          />
           {employee.mobilePhone && (
             <DetailRow label="Mobile" value={employee.mobilePhone} />
+          )}
+          {userData?.role && (
+            <DetailRow label="Role" value={userData.role} />
+          )}
+          {(userData?.street || userData?.postalCode) && (
+            <DetailRow label="Home Address" value={[userData.street, userData.postalCode].filter(Boolean).join(' ')} />
+          )}
+          {userData?.city && (
+            <DetailRow label="City" value={userData.city} />
           )}
           {employee.absence && (
             <DetailRow label="Absence" value={employee.absence} />
@@ -89,7 +116,7 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
           {employee.mobilePhone && (
             <>
               <ActionButton label="Call" color="#22c55e" onPress={openPhone} />
-              <ActionButton label="SMS" color="#10493C" onPress={openSms} />
+              <ActionButton label="SMS" color="#006559" onPress={openSms} />
             </>
           )}
           <ActionButton label="Teams" color="#6264A7" onPress={openTeams} />
@@ -97,6 +124,19 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
       </ScrollView>
     </Modal>
   );
+}
+
+function formatLocationSince(location: string, since: Date | null): string {
+  if (!since) return location;
+  const now = new Date();
+  const isToday =
+    since.getFullYear() === now.getFullYear() &&
+    since.getMonth() === now.getMonth() &&
+    since.getDate() === now.getDate();
+  const time = since.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `${location}, Checked in: ${time}`;
+  const date = since.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return `${location}, Checked in: ${date} ${time}`;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -145,7 +185,7 @@ function presenceColor(availability: string): string {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   closeBtn: { padding: 16, alignItems: 'flex-end' },
-  closeBtnText: { fontSize: 16, color: '#10493C', fontWeight: '600' },
+  closeBtnText: { fontSize: 16, color: '#006559', fontWeight: '600' },
   header: {
     flexDirection: 'row',
     padding: 20,
@@ -154,7 +194,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: { width: 72, height: 72, borderRadius: 36 },
-  avatarPlaceholder: { backgroundColor: '#10493C', alignItems: 'center', justifyContent: 'center' },
+  avatarPlaceholder: { backgroundColor: '#006559', alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { color: '#fff', fontWeight: '700', fontSize: 26 },
   headerText: { flex: 1 },
   name: { fontSize: 20, fontWeight: '700', color: '#111' },

@@ -8,7 +8,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
@@ -46,7 +45,7 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#10493C" />
+        <ActivityIndicator size="large" color="#006559" />
       </View>
     );
   }
@@ -72,11 +71,10 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
-      <Text style={styles.header}>Office Overview</Text>
+    <ScrollView style={styles.container}>
+      <View style={styles.headerRow}>
+        {isRefetching && <ActivityIndicator size="small" color="#1e1b14" />}
+      </View>
       {(data ?? []).map(summary => (
         <OfficeSummaryCard key={summary.office} summary={summary} />
       ))}
@@ -184,12 +182,13 @@ async function doFetch(): Promise<OfficeSummary[]> {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#10493C', padding: 16 },
+  container: { flex: 1, backgroundColor: '#C7D3D3', padding: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 15, color: '#555' },
-  retryBtn: { backgroundColor: '#10493C', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
+  retryBtn: { backgroundColor: '#006559', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
-  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#fff' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  header: { fontSize: 32, fontWeight: '800', color: '#1e1b14', letterSpacing: -0.5 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,

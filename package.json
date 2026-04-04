@@ -1,6 +1,6 @@
 {
-  "name": "FalconMobile",
-  "version": "0.0.1",
+  "name": "AkkuroConnect",
+  "version": "1.0.12",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -24,6 +24,7 @@
     "react-native": "0.84.1",
     "react-native-app-auth": "^8.1.0",
     "react-native-geolocation-service": "^5.3.1",
+    "react-native-maps": "^1.27.2",
     "react-native-paper": "^5.15.0",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.24.0",

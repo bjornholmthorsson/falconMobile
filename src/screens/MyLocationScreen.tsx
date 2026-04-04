@@ -1,8 +1,9 @@
 /**
  * MyLocationScreen — shows the user's location history for a chosen date,
- * and lets them set a permanent known/home location.
+ * a map with known location markers, and lets them set/remove a known location.
  */
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -12,12 +13,15 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import MapView, { Marker, Callout, Region } from 'react-native-maps';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getUserHistory,
   postKnownLocation,
+  addKnownLocation,
   deleteKnownLocation,
   getKnownUserLocations,
+  getKnownLocations,
 } from '../services/api';
 import {
   getCurrentPosition,
@@ -30,7 +34,30 @@ export default function MyLocationScreen() {
   const currentUser = useAppStore(s => s.currentUser);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loadingKnown, setLoadingKnown] = useState(false);
+  const [loadingAdd, setLoadingAdd]     = useState(false);
+  const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
+  const [pinnedCoordinate, setPinnedCoordinate] = useState<{ latitude: number; longitude: number } | null>(null);
   const qc = useQueryClient();
+
+  // Refetch known locations every time screen comes into focus
+  useFocusEffect(useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['knownUserLocations', currentUser?.id] });
+  }, [currentUser?.id, qc]));
+
+  // Centre map on user's current GPS position on mount
+  useEffect(() => {
+    requestLocationPermission().then(granted => {
+      if (!granted) return;
+      getCurrentPosition().then(pos => {
+        setCurrentRegion({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+      }).catch(() => {});
+    });
+  }, []);
 
   const dateLabel = selectedDate.toLocaleDateString();
 
@@ -40,11 +67,64 @@ export default function MyLocationScreen() {
     enabled: !!currentUser,
   });
 
-  const { data: knownLocations = [] } = useQuery<KnownLocation[]>({
+  const { data: knownUserLocations = [] } = useQuery<KnownLocation[]>({
     queryKey: ['knownUserLocations', currentUser?.id],
     queryFn: () => getKnownUserLocations(currentUser!.id),
     enabled: !!currentUser,
   });
+
+  const { data: allKnownLocations = [] } = useQuery<KnownLocation[]>({
+    queryKey: ['knownLocations'],
+    queryFn: getKnownLocations,
+  });
+
+  // Build a map of location name → coordinates for pinning history entries
+  const locationCoordMap = useMemo(() => {
+    const map = new Map<string, { latitude: number; longitude: number }>();
+    for (const loc of allKnownLocations) {
+      if (loc.location?.coordinates) {
+        map.set(loc.clientName, {
+          latitude: loc.location.coordinates[0],
+          longitude: loc.location.coordinates[1],
+        });
+      }
+    }
+    return map;
+  }, [allKnownLocations]);
+
+  // Unique locations visited today that have known coordinates
+  const historyMarkers = useMemo(() => {
+    const seen = new Set<string>();
+    const markers: { name: string; latitude: number; longitude: number }[] = [];
+    for (const entry of history) {
+      if (!seen.has(entry.location)) {
+        seen.add(entry.location);
+        const coords = locationCoordMap.get(entry.location);
+        if (coords) markers.push({ name: entry.location, ...coords });
+      }
+    }
+    return markers;
+  }, [history, locationCoordMap]);
+
+  // The logged-in user's own Home entry (client_name = 'Home', user_id = current user)
+  const homeLocation = useMemo(
+    () => knownUserLocations.find(l => l.clientName === 'Home' && l.id === currentUser?.id),
+    [knownUserLocations, currentUser?.id],
+  );
+
+  // Initial map region — current GPS position, then home location, then Reykjavik fallback
+  const initialRegion: Region = useMemo(() => {
+    if (currentRegion) return currentRegion;
+    if (homeLocation?.location?.coordinates) {
+      return {
+        latitude: homeLocation.location.coordinates[0],
+        longitude: homeLocation.location.coordinates[1],
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+    }
+    return { latitude: 64.1355, longitude: -21.8954, latitudeDelta: 0.1, longitudeDelta: 0.1 };
+  }, [currentRegion, homeLocation]);
 
   function shiftDate(days: number) {
     setSelectedDate(d => {
@@ -93,69 +173,152 @@ export default function MyLocationScreen() {
     ]);
   }
 
+  async function handleAddKnownLocation() {
+    if (!currentUser || !pinnedCoordinate) return;
+    Alert.prompt(
+      'Set known location',
+      'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
+      async (name) => {
+        if (!name?.trim()) return;
+        setLoadingAdd(true);
+        try {
+          await addKnownLocation(currentUser.id, name.trim(), pinnedCoordinate.longitude, pinnedCoordinate.latitude);
+          qc.invalidateQueries({ queryKey: ['knownUserLocations'] });
+          setPinnedCoordinate(null);
+          Alert.alert('Saved', `"${name.trim()}" has been added as a known location.`);
+        } catch (err: any) {
+          Alert.alert('Error', err?.message ?? 'Failed to add location');
+        } finally {
+          setLoadingAdd(false);
+        }
+      },
+      'plain-text',
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>My Location</Text>
 
-      {knownLocations.length > 0 && (
+      {/* Map */}
+      <MapView
+        style={styles.map}
+        initialRegion={initialRegion}
+        region={currentRegion ?? initialRegion}
+        showsUserLocation
+        showsMyLocationButton
+        onLongPress={e => setPinnedCoordinate(e.nativeEvent.coordinate)}
+      >
+        {/* User's known locations — labelled pins */}
+        {knownUserLocations.map(loc =>
+          loc.location?.coordinates ? (
+            <Marker
+              key={`known-${loc.id}`}
+              coordinate={{
+                latitude: loc.location.coordinates[0],
+                longitude: loc.location.coordinates[1],
+              }}
+              pinColor={loc.clientName === 'Home' ? '#006559' : '#f97316'}
+            >
+              <Callout tooltip>
+                <View style={styles.callout}>
+                  <Text style={styles.calloutText}>{loc.clientName}</Text>
+                </View>
+              </Callout>
+            </Marker>
+          ) : null
+        )}
+        {/* Locations visited today */}
+        {historyMarkers.map(marker => (
+          <Marker
+            key={`hist-${marker.name}`}
+            coordinate={{ latitude: marker.latitude, longitude: marker.longitude }}
+            title={marker.name}
+            pinColor="#f97316"
+          />
+        ))}
+        {/* Long-press pin */}
+        {pinnedCoordinate && (
+          <Marker coordinate={pinnedCoordinate} pinColor="#6366f1" />
+        )}
+      </MapView>
+
+      {/* Controls */}
+      <View style={styles.controls}>
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Known location</Text>
-          <Text style={styles.cardValue}>{knownLocations[0].clientName}</Text>
-          <TouchableOpacity onPress={handleDeleteKnownLocation}>
-            <Text style={styles.deleteLink}>Remove</Text>
+          <Text style={styles.cardLabel}>Home location</Text>
+          <Text style={styles.cardValue}>{homeLocation?.clientName ?? '—'}</Text>
+          <View style={styles.cardActions}>
+            {loadingKnown ? (
+              <ActivityIndicator size="small" color="#006559" />
+            ) : (
+              <TouchableOpacity onPress={handleSetKnownLocation}>
+                <Text style={styles.setHomeLink}>Set as Home</Text>
+              </TouchableOpacity>
+            )}
+            {homeLocation && (
+              <TouchableOpacity onPress={handleDeleteKnownLocation}>
+                <Text style={styles.deleteLink}>Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        {loadingAdd ? (
+          <ActivityIndicator color="#006559" style={{ marginBottom: 16 }} />
+        ) : (
+          <TouchableOpacity
+            style={[styles.addBtn, !pinnedCoordinate && styles.addBtnDisabled]}
+            onPress={handleAddKnownLocation}
+            disabled={!pinnedCoordinate}
+          >
+            <Text style={[styles.addBtnText, !pinnedCoordinate && styles.addBtnTextDisabled]}>
+              {pinnedCoordinate ? 'Set Known Location' : 'Long-press map to pin a location'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.dateNav}>
+          <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.navBtn}>
+            <Text style={styles.navBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.dateLabel}>{dateLabel}</Text>
+          <TouchableOpacity
+            onPress={() => shiftDate(1)}
+            style={styles.navBtn}
+            disabled={selectedDate >= new Date()}
+          >
+            <Text style={styles.navBtnText}>›</Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {loadingKnown ? (
-        <ActivityIndicator color="#10493C" style={{ marginBottom: 16 }} />
-      ) : (
-        <TouchableOpacity style={styles.setBtn} onPress={handleSetKnownLocation}>
-          <Text style={styles.setBtnText}>Set Current Position as Known Location</Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.dateNav}>
-        <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.navBtn}>
-          <Text style={styles.navBtnText}>‹</Text>
-        </TouchableOpacity>
-        <Text style={styles.dateLabel}>{dateLabel}</Text>
-        <TouchableOpacity
-          onPress={() => shiftDate(1)}
-          style={styles.navBtn}
-          disabled={selectedDate >= new Date()}
-        >
-          <Text style={styles.navBtnText}>›</Text>
-        </TouchableOpacity>
+        {histFetching ? (
+          <ActivityIndicator color="#006559" style={{ marginTop: 8 }} />
+        ) : (
+          <FlatList
+            data={history}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={({ item }) => (
+              <View style={styles.historyRow}>
+                <Text style={styles.historyTime}>
+                  {new Date(item.timestamp).toLocaleTimeString()}
+                </Text>
+                <Text style={styles.historyLocation}>{item.location}</Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.empty}>No location data for this day.</Text>
+            }
+            contentContainerStyle={styles.listContent}
+          />
+        )}
       </View>
-
-      {histFetching ? (
-        <ActivityIndicator color="#10493C" style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          data={history}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => (
-            <View style={styles.historyRow}>
-              <Text style={styles.historyTime}>
-                {new Date(item.timestamp).toLocaleTimeString()}
-              </Text>
-              <Text style={styles.historyLocation}>{item.location}</Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No location data for this day.</Text>
-          }
-          contentContainerStyle={styles.listContent}
-        />
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
-  header: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: '#111' },
+  container: { flex: 1, backgroundColor: '#C7D3D3' },
+  map: { height: 280 },
+  controls: { flex: 1, padding: 16 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -168,23 +331,36 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 13, color: '#888' },
   cardValue: { flex: 1, fontSize: 15, fontWeight: '600', color: '#111' },
   deleteLink: { fontSize: 13, color: '#ef4444' },
+  cardActions: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+  setHomeLink: { fontSize: 13, color: '#006559', fontWeight: '600' },
   setBtn: {
-    backgroundColor: '#10493C',
+    backgroundColor: '#006559',
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   setBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  addBtn: {
+    borderWidth: 1.5,
+    borderColor: '#006559',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addBtnText: { color: '#006559', fontWeight: '600', fontSize: 14 },
+  addBtnDisabled: { borderColor: '#d1d5db', backgroundColor: '#f9fafb' },
+  addBtnTextDisabled: { color: '#9ca3af' },
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   navBtn: { padding: 8 },
-  navBtnText: { fontSize: 28, color: '#10493C' },
+  navBtnText: { fontSize: 28, color: '#006559' },
   dateLabel: { fontSize: 16, fontWeight: '600', color: '#111', minWidth: 120, textAlign: 'center' },
   historyRow: {
     backgroundColor: '#fff',
@@ -196,6 +372,18 @@ const styles = StyleSheet.create({
   },
   historyTime: { fontSize: 13, color: '#888', width: 80 },
   historyLocation: { flex: 1, fontSize: 14, color: '#111' },
-  empty: { textAlign: 'center', color: '#999', marginTop: 40, fontSize: 15 },
+  empty: { textAlign: 'center', color: '#999', marginTop: 20, fontSize: 15 },
+  callout: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  calloutText: { fontSize: 13, fontWeight: '600', color: '#1e1b14' },
   listContent: { paddingBottom: 32 },
 });

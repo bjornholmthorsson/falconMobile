@@ -18,7 +18,7 @@ import {
 } from './api';
 import type { KnownLocation } from '../models';
 
-const CACHE_KEY = '@falcon/knownLocations';
+const CACHE_KEY = '@falcon/knownLocations/v2';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 const MIN_DISPLACEMENT_M = 50;
 const KNOWN_LOCATION_RADIUS_KM = 0.5;
@@ -91,6 +91,7 @@ export async function resolveLocationName(
   if (!known.length) return 'unknown';
 
   const withDistance = known
+    .filter(loc => loc.location?.coordinates != null)
     .map(loc => ({
       ...loc,
       distance: haversineKm(

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -24,38 +24,41 @@ const Tab = createBottomTabNavigator();
 function MainTabs() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
+  const EmployeesTab = useCallback(() => (
+    <>
+      <EmployeesScreen onSelectEmployee={setSelectedEmployee} />
+      <EmployeeDetailScreen
+        employee={selectedEmployee}
+        visible={!!selectedEmployee}
+        onClose={() => setSelectedEmployee(null)}
+      />
+    </>
+  ), [selectedEmployee]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           if (route.name === 'Home') return <HomeIcon color={color} size={size} />;
-          if (route.name === 'Employees') return <EmployeesIcon color={color} size={size} />;
+          if (route.name === 'Team') return <EmployeesIcon color={color} size={size} />;
           if (route.name === 'Absence') return <AbsenceIcon color={color} size={size} />;
-          if (route.name === 'Location') return <LocationIcon color={color} size={size} />;
+          if (route.name === 'Pulse') return <LocationIcon color={color} size={size} />;
           if (route.name === 'Lunch') return <LunchIcon color={color} size={size} />;
           if (route.name === 'Profile') return <ProfileIcon color={color} size={size} />;
           return null;
         },
-        tabBarActiveTintColor: '#10493C',
+        tabBarActiveTintColor: '#006559',
         tabBarInactiveTintColor: '#9ca3af',
         headerShown: true,
+        headerStyle: { backgroundColor: '#006E61' },
+        headerTintColor: '#ffffff',
+        headerTitleStyle: { fontWeight: '700' },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Employees">
-        {() => (
-          <>
-            <EmployeesScreen onSelectEmployee={setSelectedEmployee} />
-            <EmployeeDetailScreen
-              employee={selectedEmployee}
-              visible={!!selectedEmployee}
-              onClose={() => setSelectedEmployee(null)}
-            />
-          </>
-        )}
-      </Tab.Screen>
+      <Tab.Screen name="Team" component={EmployeesTab} />
       <Tab.Screen name="Absence" component={RegisterAbsenceScreen} />
-      <Tab.Screen name="Location" component={MyLocationScreen} />
+      <Tab.Screen name="Pulse" component={MyLocationScreen} />
       <Tab.Screen name="Lunch" component={LunchScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -71,7 +74,7 @@ export default function AppNavigator() {
   if (!authRestored) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' }}>
-        <ActivityIndicator size="large" color="#10493C" />
+        <ActivityIndicator size="large" color="#006559" />
       </View>
     );
   }

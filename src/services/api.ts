@@ -6,6 +6,7 @@ import type {
   Absence,
   UserData,
   HistoricalLocation,
+  LunchWeek,
 } from '../models';
 
 const BASE_URL = 'https://fd-falcon.azurewebsites.net';
@@ -78,6 +79,25 @@ export async function postKnownLocation(
   return res.ok;
 }
 
+export async function addKnownLocation(
+  userId: string,
+  name: string,
+  longitude: number,
+  latitude: number,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/known-locations?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Name: name, Longitude: longitude, Latitude: latitude }),
+      signal,
+    },
+  );
+  return res.ok;
+}
+
 export async function deleteKnownLocation(
   userId: string,
   signal?: AbortSignal,
@@ -122,6 +142,43 @@ export async function getUserHistory(
     signal,
   );
   return data?.locations ?? [];
+}
+
+// ── Lunch ────────────────────────────────────────────────────────────────────
+
+export async function getLunchMenu(
+  year: number,
+  week: number,
+  signal?: AbortSignal,
+): Promise<LunchWeek> {
+  return apiGet<LunchWeek>(`/api/lunch-menu?year=${year}&week=${week}&code=${CODE}`, signal);
+}
+
+export async function getLunchOrders(
+  userId: string,
+  year: number,
+  week: number,
+  signal?: AbortSignal,
+): Promise<Record<number, string>> {
+  return apiGet<Record<number, string>>(
+    `/api/lunch-order?userId=${encodeURIComponent(userId)}&year=${year}&week=${week}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function submitLunchOrders(
+  userId: string,
+  weekId: number,
+  orders: { dayId: number; category: string }[],
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/lunch-order?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, weekId, orders }),
+    signal,
+  });
+  return res.ok;
 }
 
 // ── Absences ────────────────────────────────────────────────────────────────

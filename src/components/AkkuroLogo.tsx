@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-const FILL = '#10493C';
+const FILL = '#006559';
 
 export default function AkkuroLogo({ width = 206, height = 36 }: { width?: number; height?: number }) {
   return (

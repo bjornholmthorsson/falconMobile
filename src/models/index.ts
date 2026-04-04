@@ -17,6 +17,7 @@ export interface Employee {
   name: string;
   title: string | null;
   mobilePhone: string | null;
+  userPrincipalName: string | null;
   location: string;
   lastKnownLocation: string;
   locationChanged: Date | null;
@@ -126,4 +127,28 @@ export interface OfficeSummary {
   available: number;
   away: number;
   offline: number;
+}
+
+export interface LunchOption {
+  category: string;
+  description: string;
+}
+
+export interface LunchDay {
+  id: number;
+  dayOfWeek: string;
+  date: string;
+  holiday: string | null;
+  options: LunchOption[];
+}
+
+export interface LunchWeek {
+  id: number;
+  year: number;
+  weekNumber: number;
+  restaurant: string | null;
+  priceIsk: number | null;
+  subsidyPct: number;
+  dateLabel: string | null;
+  days: LunchDay[];
 }

@@ -195,7 +195,7 @@ export async function getUserPhoto(
 
 // ── Teams messaging ───────────────────────────────────────────────────────────
 
-const SUPERVISOR_UPN = 'bjorn.holmthorsson@fivedegrees.com';
+const SUPERVISOR_UPN = 'bjorn@fivedegrees.nl';
 
 export async function sendAbsenceNotification(
   absenceKey: string,
