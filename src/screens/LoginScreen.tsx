@@ -9,7 +9,11 @@ import {
   Image,
   StatusBar,
   Linking,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { signIn } from '../services/authService';
@@ -40,6 +44,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container} edges={[]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff8f1" />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} bounces={false} showsVerticalScrollIndicator={false}>
 
       {/* Top bar — floats over the hero */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
@@ -94,6 +99,7 @@ export default function LoginScreen() {
           <Text style={styles.footerVersion}>v{APP_VERSION}</Text>
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -106,6 +112,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fbf3e7',
   },
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
 
   // Top bar
   topBar: {
@@ -136,7 +144,7 @@ const styles = StyleSheet.create({
 
   // Hero
   heroSection: {
-    height: 420,
+    height: Math.min(420, SCREEN_HEIGHT * 0.45),
     width: '100%',
     marginTop: 0, // overridden inline
   },
@@ -220,7 +228,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: PRIMARY,
     borderRadius: 50,
-    paddingVertical: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 32,
+    alignSelf: 'center',
     gap: 10,
     shadowColor: PRIMARY_DARK,
     shadowOffset: { width: 0, height: 8 },
