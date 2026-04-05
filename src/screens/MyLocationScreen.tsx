@@ -9,7 +9,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -59,13 +59,24 @@ export default function MyLocationScreen() {
     });
   }, []);
 
-  const dateLabel = selectedDate.toLocaleDateString();
+  const dateLabel = selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const { data: history = [], isFetching: histFetching } = useQuery<HistoricalLocation[]>({
+  const { data: rawHistory = [], isFetching: histFetching } = useQuery<HistoricalLocation[]>({
     queryKey: ['history', currentUser?.id, selectedDate.toDateString()],
     queryFn: () => getUserHistory(currentUser!.id, selectedDate),
     enabled: !!currentUser,
   });
+
+  // Deduplicate: keep only the first occurrence of each unique timestamp+location pair
+  const history = useMemo(() => {
+    const seen = new Set<string>();
+    return rawHistory.filter(item => {
+      const key = `${item.timestamp.trim()}|${item.location.trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rawHistory]);
 
   const { data: knownUserLocations = [] } = useQuery<KnownLocation[]>({
     queryKey: ['knownUserLocations', currentUser?.id],
@@ -212,7 +223,7 @@ export default function MyLocationScreen() {
         {knownUserLocations.map(loc =>
           loc.location?.coordinates ? (
             <Marker
-              key={`known-${loc.id}`}
+              key={`known-${loc.id}-${loc.clientName}`}
               coordinate={{
                 latitude: loc.location.coordinates[0],
                 longitude: loc.location.coordinates[1],
@@ -243,7 +254,7 @@ export default function MyLocationScreen() {
       </MapView>
 
       {/* Controls */}
-      <View style={styles.controls}>
+      <ScrollView style={styles.controls} contentContainerStyle={styles.controlsContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Home location</Text>
           <Text style={styles.cardValue}>{homeLocation?.clientName ?? '—'}</Text>
@@ -290,27 +301,23 @@ export default function MyLocationScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.checkinsTitle}>Check-in's</Text>
+
         {histFetching ? (
           <ActivityIndicator color="#006559" style={{ marginTop: 8 }} />
+        ) : history.length === 0 ? (
+          <Text style={styles.empty}>No location data for this day.</Text>
         ) : (
-          <FlatList
-            data={history}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={({ item }) => (
-              <View style={styles.historyRow}>
-                <Text style={styles.historyTime}>
-                  {new Date(item.timestamp).toLocaleTimeString()}
-                </Text>
-                <Text style={styles.historyLocation}>{item.location}</Text>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.empty}>No location data for this day.</Text>
-            }
-            contentContainerStyle={styles.listContent}
-          />
+          history.map((item, i) => (
+            <View key={`${i}-${item.timestamp}`} style={styles.historyRow}>
+              <Text style={styles.historyLocation}>{item.location}</Text>
+              <Text style={styles.historyTime}>
+                {new Date(item.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+              </Text>
+            </View>
+          ))
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -318,7 +325,8 @@ export default function MyLocationScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#C7D3D3' },
   map: { height: 280 },
-  controls: { flex: 1, padding: 16 },
+  controls: { flex: 1 },
+  controlsContent: { padding: 16, paddingBottom: 32 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -362,16 +370,19 @@ const styles = StyleSheet.create({
   navBtn: { padding: 8 },
   navBtnText: { fontSize: 28, color: '#006559' },
   dateLabel: { fontSize: 16, fontWeight: '600', color: '#111', minWidth: 120, textAlign: 'center' },
+  checkinsTitle: { fontSize: 15, fontWeight: '700', color: '#374151', marginBottom: 8, marginTop: 4 },
   historyRow: {
-    backgroundColor: '#fff',
+    backgroundColor: '#e8ecec',
     borderRadius: 8,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 6,
   },
-  historyTime: { fontSize: 13, color: '#888', width: 80 },
-  historyLocation: { flex: 1, fontSize: 14, color: '#111' },
+  historyTime: { fontSize: 13, color: '#555', fontWeight: '500', textAlign: 'right' },
+  historyLocation: { flex: 1, fontSize: 14, color: '#111', fontWeight: '500' },
   empty: { textAlign: 'center', color: '#999', marginTop: 20, fontSize: 15 },
   callout: {
     backgroundColor: '#fff',
@@ -385,5 +396,4 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   calloutText: { fontSize: 13, fontWeight: '600', color: '#1e1b14' },
-  listContent: { paddingBottom: 32 },
 });

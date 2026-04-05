@@ -181,7 +181,7 @@ function EmployeeCard({
         ) : null}
         <TouchableOpacity style={styles.btnIcon} onPress={onPress} activeOpacity={0.8}>
           <Icon
-            name={isAvailable ? 'calendar-outline' : 'dots-horizontal'}
+            name="dots-horizontal"
             size={20}
             color="#006559"
           />
