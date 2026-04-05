@@ -12,20 +12,29 @@ import { useAppStore } from '../store/appStore';
 
 export function useLocationWatcher() {
   const currentUser = useAppStore(s => s.currentUser);
+  const checkinEnabled = useAppStore(s => s.checkinEnabled);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !checkinEnabled) {
+      // Ensure watcher is stopped whenever the condition is not met,
+      // including when checkinEnabled is toggled off at runtime.
+      stopWatching();
+      return;
+    }
 
-    let started = false;
+    let cancelled = false;
     requestLocationPermission().then(granted => {
-      if (granted && currentUser) {
+      // Guard against the effect being cleaned up before the async
+      // permission response came back — without this, the watcher
+      // could start after checkinEnabled was already set to false.
+      if (!cancelled && granted) {
         startWatching(currentUser.id);
-        started = true;
       }
     });
 
     return () => {
-      if (started) stopWatching();
+      cancelled = true;   // prevent startWatching from firing late
+      stopWatching();     // always stop, regardless of whether it started
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, checkinEnabled]);
 }

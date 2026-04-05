@@ -13,10 +13,13 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import { getUserPhoto } from '../services/graphService';
 import { getUserInformation } from '../services/api';
 import type { Employee, UserData } from '../models';
+
+const SLACK_TEAM_ID = 'TD8GE7QFQ';
 
 type Props = {
   employee: Employee | null;
@@ -114,12 +117,41 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
 
         <View style={styles.actions}>
           {employee.mobilePhone && (
-            <>
-              <ActionButton label="Call" color="#22c55e" onPress={openPhone} />
-              <ActionButton label="SMS" color="#006559" onPress={openSms} />
-            </>
+            <TouchableOpacity style={styles.btnPhone} onPress={openPhone} activeOpacity={0.8}>
+              <Icon name="phone-outline" size={24} color="#006559" />
+            </TouchableOpacity>
           )}
-          <ActionButton label="Teams" color="#6264A7" onPress={openTeams} />
+          {employee.mobilePhone && (
+            <TouchableOpacity style={styles.btnSms} onPress={openSms} activeOpacity={0.8}>
+              <Icon name="message-outline" size={24} color="#0ea5e9" />
+            </TouchableOpacity>
+          )}
+          {employee.mobilePhone && (
+            <TouchableOpacity
+              style={styles.btnWhatsApp}
+              onPress={() => {
+                const digits = employee!.mobilePhone!.replace(/\D/g, '');
+                Linking.openURL(`whatsapp://send?phone=${digits}`);
+              }}
+              activeOpacity={0.8}
+            >
+              <Icon name="whatsapp" size={24} color="#25D366" />
+            </TouchableOpacity>
+          )}
+          {employee.userPrincipalName && (
+            <TouchableOpacity style={styles.btnTeams} onPress={openTeams} activeOpacity={0.8}>
+              <Icon name="microsoft-teams" size={24} color="#6264A7" />
+            </TouchableOpacity>
+          )}
+          {userData?.slackMemberId && (
+            <TouchableOpacity
+              style={styles.btnSlack}
+              onPress={() => Linking.openURL(`slack://user?team=${SLACK_TEAM_ID}&id=${userData!.slackMemberId}`).catch(() => Linking.openURL(`https://app.slack.com/client/${SLACK_TEAM_ID}`))}
+              activeOpacity={0.8}
+            >
+              <Icon name="slack" size={24} color="#4A154B" />
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </Modal>
@@ -145,22 +177,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
     </View>
-  );
-}
-
-function ActionButton({
-  label,
-  color,
-  onPress,
-}: {
-  label: string;
-  color: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: color }]} onPress={onPress}>
-      <Text style={styles.actionBtnText}>{label}</Text>
-    </TouchableOpacity>
   );
 }
 
@@ -222,11 +238,29 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'center',
   },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
+  btnPhone: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: 'rgba(0,101,89,0.1)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  btnSms: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: 'rgba(14,165,233,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnWhatsApp: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: 'rgba(37,211,102,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnTeams: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: 'rgba(98,100,167,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  btnSlack: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: 'rgba(74,21,75,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

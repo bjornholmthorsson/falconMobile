@@ -21,8 +21,9 @@ import {
   getUserPhoto,
   OFFICES,
 } from '../services/graphService';
-import { getUserAbsences, getUserLocations } from '../services/api';
-import type { Employee, User, TeamsPresence, UserAbsence, UserLocation } from '../models';
+import { getUserAbsences, getUserLocations, getUserData } from '../services/api';
+import { useAppStore } from '../store/appStore';
+import type { Employee, User, TeamsPresence, UserAbsence, UserLocation, UserData } from '../models';
 
 const REFRESH_INTERVAL_MS = 60_000;
 
@@ -32,6 +33,16 @@ type Props = {
 
 export default function EmployeesScreen({ onSelectEmployee }: Props) {
   const [search, setSearch] = useState('');
+  const officeFilter = useAppStore(s => s.teamOfficeFilter);
+  const setOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
+
+  function toggleOffice(office: string) {
+    if (officeFilter.includes(office)) {
+      setOfficeFilter(officeFilter.filter(o => o !== office));
+    } else {
+      setOfficeFilter([...officeFilter, office]);
+    }
+  }
 
   const { data: employees, refetch, isRefetching } = useQuery<Employee[]>({
     queryKey: ['employees', 'all'],
@@ -48,13 +59,16 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
     const q = search.trim().toLowerCase();
     const base = employees ?? [];
     const sorted = base.slice().sort((a, b) => a.name.localeCompare(b.name));
-    if (!q) return sorted;
-    return sorted.filter(
+    const byOffice = officeFilter.length > 0
+      ? sorted.filter(e => officeFilter.includes(e.office))
+      : sorted;
+    if (!q) return byOffice;
+    return byOffice.filter(
       e =>
         e.name.toLowerCase().includes(q) ||
         (e.title ?? '').toLowerCase().includes(q),
     );
-  }, [employees, search]);
+  }, [employees, search, officeFilter]);
 
   const totalCount = employees?.length ?? 0;
 
@@ -85,6 +99,24 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
                 onChangeText={setSearch}
                 clearButtonMode="while-editing"
               />
+            </View>
+            {/* Office filter chips */}
+            <View style={styles.filterRow}>
+              {OFFICES.map(office => {
+                const active = officeFilter.includes(office);
+                return (
+                  <TouchableOpacity
+                    key={office}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => toggleOffice(office)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                      {office}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         }
@@ -158,6 +190,30 @@ function EmployeeCard({
       <View style={styles.cardActions}>
         {employee.mobilePhone ? (
           <TouchableOpacity
+            style={styles.btnPhone}
+            activeOpacity={0.8}
+            onPress={() => {
+              const digits = employee.mobilePhone!.replace(/\D/g, '');
+              Linking.openURL(`tel:+${digits}`);
+            }}
+          >
+            <Icon name="phone-outline" size={22} color="#006559" />
+          </TouchableOpacity>
+        ) : null}
+        {employee.mobilePhone ? (
+          <TouchableOpacity
+            style={styles.btnSms}
+            activeOpacity={0.8}
+            onPress={() => {
+              const digits = employee.mobilePhone!.replace(/\D/g, '');
+              Linking.openURL(`sms:+${digits}`);
+            }}
+          >
+            <Icon name="message-outline" size={22} color="#0ea5e9" />
+          </TouchableOpacity>
+        ) : null}
+        {employee.mobilePhone ? (
+          <TouchableOpacity
             style={styles.btnWhatsApp}
             activeOpacity={0.8}
             onPress={() => {
@@ -177,6 +233,15 @@ function EmployeeCard({
             }}
           >
             <Icon name="microsoft-teams" size={22} color="#6264A7" />
+          </TouchableOpacity>
+        ) : null}
+        {employee.slackMemberId ? (
+          <TouchableOpacity
+            style={styles.btnSlack}
+            activeOpacity={0.8}
+            onPress={() => Linking.openURL(`slack://user?team=TD8GE7QFQ&id=${employee.slackMemberId}`).catch(() => Linking.openURL(`https://app.slack.com/client/TD8GE7QFQ`))}
+          >
+            <Icon name="slack" size={22} color="#4A154B" />
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={styles.btnIcon} onPress={onPress} activeOpacity={0.8}>
@@ -214,10 +279,11 @@ function statusStyle(availability: string): {
 }
 
 async function fetchAllEmployees(): Promise<Employee[]> {
-  const [officeResults, absences, locations] = await Promise.all([
+  const [officeResults, absences, locations, userData] = await Promise.all([
     Promise.allSettled(OFFICES.map(office => getUsersByOffice(office).then(users => ({ office, users })))),
     getUserAbsences().catch(() => [] as UserAbsence[]),
     getUserLocations().catch(() => [] as UserLocation[]),
+    getUserData().catch(() => [] as UserData[]),
   ]);
 
   const userMap = new Map<string, { user: User; office: string }>();
@@ -243,11 +309,14 @@ async function fetchAllEmployees(): Promise<Employee[]> {
   for (const a of absences) absenceMap.set(a.userId, a);
   const locationMap = new Map<string, UserLocation>();
   for (const l of locations) locationMap.set(l.id, l);
+  const userDataMap = new Map<string, UserData>();
+  for (const d of userData) userDataMap.set(d.userId, d);
 
   return activeUsers.map(({ user: u, office }) => {
     const presence = presenceMap.get(u.id);
     const absence = absenceMap.get(u.id);
     const loc = locationMap.get(u.id);
+    const ud = userDataMap.get(u.id);
     return {
       userId: u.id,
       name: u.displayName,
@@ -255,6 +324,7 @@ async function fetchAllEmployees(): Promise<Employee[]> {
       mobilePhone: u.mobilePhone,
       userPrincipalName: u.userPrincipalName ?? null,
       location: u.officeLocation ?? office,
+      office,
       lastKnownLocation: loc?.location ?? '',
       locationChanged: loc ? new Date(loc.lastUpdated) : null,
       teamsAvailability: presence?.availability ?? 'Offline',
@@ -265,6 +335,7 @@ async function fetchAllEmployees(): Promise<Employee[]> {
       absenceComment: absence?.comment ?? null,
       absenceImage: null,
       photo: null,
+      slackMemberId: ud?.slackMemberId ?? null,
     };
   });
 }
@@ -300,7 +371,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 8,
   },
-  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 24 },
   heading: {
     fontSize: 32,
     fontWeight: '800',
@@ -312,6 +383,32 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  filterChip: {
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: '#fff',
+  },
+  filterChipActive: {
+    borderColor: '#006559',
+    backgroundColor: '#006559',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  filterChipTextActive: {
+    color: '#fff',
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -452,6 +549,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
   },
+  btnPhone: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,101,89,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSms: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: 'rgba(14,165,233,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   btnWhatsApp: {
     width: 48,
     height: 48,
@@ -465,6 +578,14 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: 'rgba(98,100,167,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSlack: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: 'rgba(74,21,75,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },

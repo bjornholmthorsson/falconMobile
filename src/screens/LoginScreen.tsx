@@ -11,9 +11,13 @@ import {
   Linking,
   ScrollView,
   Dimensions,
+  Platform,
 } from 'react-native';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const HERO_HEIGHT = Platform.OS === 'ios'
+  ? Math.min(540, SCREEN_HEIGHT * 0.62)
+  : Math.min(380, SCREEN_HEIGHT * 0.53);
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { signIn } from '../services/authService';
@@ -93,11 +97,8 @@ export default function LoginScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <View>
-          <Text style={styles.footerAppName}>Akkuro Connect</Text>
-          <Text style={styles.footerCopyright}>© 2024 Akkuro Connect.</Text>
-          <Text style={styles.footerVersion}>v{APP_VERSION}</Text>
-        </View>
+        <Text style={styles.footerCopyright}>© 2026 Akkuro.</Text>
+        <Text style={styles.footerVersion}>v{APP_VERSION}</Text>
       </View>
       </ScrollView>
     </SafeAreaView>
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
 
   // Hero
   heroSection: {
-    height: Math.min(420, SCREEN_HEIGHT * 0.45),
+    height: HERO_HEIGHT,
     width: '100%',
     marginTop: 0, // overridden inline
   },
@@ -164,7 +165,7 @@ const styles = StyleSheet.create({
   },
   heroOverlay: {
     position: 'absolute',
-    bottom: 60,
+    top: 16,
     left: 28,
     right: 28,
     gap: 12,
@@ -201,8 +202,8 @@ const styles = StyleSheet.create({
     marginTop: -40,
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 20,
-    gap: 20,
+    paddingTop: 12,
+    gap: 12,
   },
   dragHandle: {
     width: 48,
@@ -210,7 +211,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#bdc9c5',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     opacity: 0.5,
   },
   subtitle: {

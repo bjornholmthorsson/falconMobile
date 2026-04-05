@@ -8,6 +8,7 @@
  * Must be registered in Azure AD → Authentication → Mobile/Desktop.
  */
 import { authorize, refresh } from 'react-native-app-auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CLIENT_ID = '3639c730-2334-44d6-9350-1cb2748da8d8';
 const TENANT_ID = 'common';
@@ -18,6 +19,7 @@ const SCOPES = [
   'User.Read', 'User.Read.All',
   'Presence.Read', 'Presence.Read.All',
   'ChatMessage.Send', 'Chat.ReadWrite',
+  'Calendars.Read',
 ];
 
 const AUTH_CONFIG = {
@@ -32,7 +34,24 @@ const AUTH_CONFIG = {
   additionalParameters: { prompt: 'select_account' },
 } as const;
 
-// ── In-memory token store ─────────────────────────────────────────────────────
+// Minimal config for the second calendar account — only requests calendar read
+// so it won't trigger admin-consent requirements in other company tenants.
+const SECOND_ACCOUNT_AUTH_CONFIG = {
+  clientId: CLIENT_ID,
+  redirectUrl: REDIRECT_URL,
+  scopes: ['openid', 'offline_access', 'User.Read', 'Calendars.Read'],
+  serviceConfiguration: {
+    authorizationEndpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`,
+    tokenEndpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/token`,
+    revocationEndpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/logout`,
+  },
+  additionalParameters: { prompt: 'select_account' },
+} as const;
+
+const BUFFER_MS = 5 * 60 * 1000;
+const SECOND_ACCOUNT_KEY = 'falcon_second_account';
+
+// ── In-memory token store (primary) ──────────────────────────────────────────
 
 interface MemToken {
   accessToken: string;
@@ -42,9 +61,8 @@ interface MemToken {
 
 let memToken: MemToken | null = null;
 
-// ── Sign in ───────────────────────────────────────────────────────────────────
+// ── Sign in (primary) ─────────────────────────────────────────────────────────
 
-/** Opens the native browser sign-in flow and stores the resulting tokens. */
 export async function signIn(): Promise<void> {
   const result = await authorize(AUTH_CONFIG);
   memToken = {
@@ -54,15 +72,13 @@ export async function signIn(): Promise<void> {
   };
 }
 
-// ── Sign out ──────────────────────────────────────────────────────────────────
+// ── Sign out (primary) ────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {
   memToken = null;
 }
 
-// ── Token access ──────────────────────────────────────────────────────────────
-
-const BUFFER_MS = 5 * 60 * 1000;
+// ── Token access (primary) ────────────────────────────────────────────────────
 
 export async function getAccessToken(): Promise<string> {
   if (!memToken) throw new Error('Not authenticated');
@@ -71,7 +87,6 @@ export async function getAccessToken(): Promise<string> {
     return memToken.accessToken;
   }
 
-  // Refresh silently
   if (!memToken.refreshToken) {
     memToken = null;
     throw new Error('Not authenticated');
@@ -93,4 +108,77 @@ export async function getAccessToken(): Promise<string> {
 
 export async function isSignedIn(): Promise<boolean> {
   return memToken !== null;
+}
+
+// ── Second account (persisted in AsyncStorage) ────────────────────────────────
+
+interface PersistedToken {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  email: string;
+}
+
+/** Opens a fresh browser sign-in for the second account and persists the tokens. */
+export async function signInSecondAccount(): Promise<string> {
+  const result = await authorize(SECOND_ACCOUNT_AUTH_CONFIG);
+
+  // Fetch email from Graph /me
+  const meRes = await fetch(
+    'https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName',
+    { headers: { Authorization: `Bearer ${result.accessToken}` } },
+  );
+  const me = await meRes.json();
+  const email: string = me.mail ?? me.userPrincipalName ?? 'Unknown';
+
+  const stored: PersistedToken = {
+    accessToken:  result.accessToken,
+    refreshToken: result.refreshToken ?? '',
+    expiresAt:    new Date(result.accessTokenExpirationDate).getTime(),
+    email,
+  };
+  await AsyncStorage.setItem(SECOND_ACCOUNT_KEY, JSON.stringify(stored));
+  return email;
+}
+
+export async function signOutSecondAccount(): Promise<void> {
+  await AsyncStorage.removeItem(SECOND_ACCOUNT_KEY);
+}
+
+export async function getSecondAccountEmail(): Promise<string | null> {
+  const raw = await AsyncStorage.getItem(SECOND_ACCOUNT_KEY);
+  if (!raw) return null;
+  return (JSON.parse(raw) as PersistedToken).email;
+}
+
+/** Returns a valid access token for the second account, refreshing silently if needed. */
+export async function getSecondAccountToken(): Promise<string | null> {
+  const raw = await AsyncStorage.getItem(SECOND_ACCOUNT_KEY);
+  if (!raw) return null;
+
+  const stored: PersistedToken = JSON.parse(raw);
+
+  if (Date.now() < stored.expiresAt - BUFFER_MS) {
+    return stored.accessToken;
+  }
+
+  if (!stored.refreshToken) {
+    await AsyncStorage.removeItem(SECOND_ACCOUNT_KEY);
+    return null;
+  }
+
+  try {
+    const result = await refresh(SECOND_ACCOUNT_AUTH_CONFIG, { refreshToken: stored.refreshToken });
+    const updated: PersistedToken = {
+      ...stored,
+      accessToken:  result.accessToken,
+      refreshToken: result.refreshToken ?? stored.refreshToken,
+      expiresAt:    new Date(result.accessTokenExpirationDate).getTime(),
+    };
+    await AsyncStorage.setItem(SECOND_ACCOUNT_KEY, JSON.stringify(updated));
+    return updated.accessToken;
+  } catch {
+    await AsyncStorage.removeItem(SECOND_ACCOUNT_KEY);
+    return null;
+  }
 }

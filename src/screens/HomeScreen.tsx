@@ -10,19 +10,132 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  ImageBackground,
+  Dimensions,
+  RefreshControl,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/graphService';
-import { getUserAbsences } from '../services/api';
+import { getUserAbsences, getLunchMenu, getLunchOrders } from '../services/api';
 import { signOut } from '../services/authService';
 import { useAppStore } from '../store/appStore';
-import type { OfficeSummary } from '../models';
+import type { OfficeSummary, LunchWeek } from '../models';
+
+const CARD_SIZE = (Dimensions.get('window').width - 48) / 2;
+
+// ── City config ───────────────────────────────────────────────────────────────
+const CITY_CONFIG: Record<string, { lat: number; lon: number; image: any }> = {
+  'Amsterdam':   { lat: 52.3676, lon: 4.9041,   image: require('../assets/images/cities/amsterdam.jpg') },
+  'Reykjavik':   { lat: 64.1355, lon: -21.8954,  image: require('../assets/images/cities/reykjavik.jpg') },
+  'Ho Chi Minh': { lat: 10.8231, lon: 106.6297,  image: require('../assets/images/cities/hochiminh.jpg') },
+  'Lisbon':      { lat: 38.7223, lon: -9.1393,   image: require('../assets/images/cities/lisbon.jpg') },
+};
+
+// ── Weather helpers ───────────────────────────────────────────────────────────
+type WeatherInfo = { temp: number; icon: string; isDay: boolean };
+
+function weatherIcon(code: number, isDay: boolean): string {
+  if (code === 0)                         return isDay ? 'weather-sunny'            : 'weather-night';
+  if (code <= 2)                          return isDay ? 'weather-partly-cloudy'    : 'weather-night-partly-cloudy';
+  if (code === 3)                         return 'weather-cloudy';
+  if (code <= 48)                         return 'weather-fog';
+  if (code <= 67 || (code >= 80 && code <= 82)) return 'weather-rainy';
+  if (code <= 77 || (code >= 85 && code <= 86)) return 'weather-snowy';
+  return 'weather-lightning-rainy';
+}
+
+async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo> {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const cw = json.current_weather;
+  return {
+    temp: Math.round(cw.temperature),
+    icon: weatherIcon(cw.weathercode, cw.is_day === 1),
+    isDay: cw.is_day === 1,
+  };
+}
+
+// ── Lunch helpers (shared with LunchScreen) ───────────────────────────────────
+function isoWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+function isoWeekYear(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  return d.getUTCFullYear();
+}
+function relevantWeekDate(): Date {
+  const d = new Date();
+  const dow = d.getDay();
+  if (dow === 6) d.setDate(d.getDate() + 2);
+  if (dow === 0) d.setDate(d.getDate() + 1);
+  return d;
+}
+type FoodTile = { icon: string; bg: string; color: string };
+function getFoodTile(category: string): FoodTile {
+  const lower = category.toLowerCase();
+  if (/burger/.test(lower))                                                    return { icon: 'hamburger',       bg: '#fff3e0', color: '#f97316' };
+  if (/fish|salmon|cod|trout|tuna|halibut|seafood|prawn|shrimp/.test(lower))  return { icon: 'fish',             bg: '#e0f2fe', color: '#0ea5e9' };
+  if (/keto/.test(lower))                                                      return { icon: 'food-drumstick',   bg: '#fef3c7', color: '#b45309' };
+  if (/vegan|plant/.test(lower))                                               return { icon: 'leaf',             bg: '#dcfce7', color: '#16a34a' };
+  if (/salad/.test(lower))                                                     return { icon: 'food-variant',     bg: '#f0fdf4', color: '#22c55e' };
+  if (/soup|stew|chowder/.test(lower))                                         return { icon: 'pot-steam',        bg: '#fef9c3', color: '#ca8a04' };
+  if (/pasta|noodle|spaghetti|penne/.test(lower))                              return { icon: 'pasta',            bg: '#fef3c7', color: '#d97706' };
+  if (/chicken|poultry|hen/.test(lower))                                       return { icon: 'food-drumstick',   bg: '#fff7ed', color: '#ea580c' };
+  if (/lamb|beef|pork|meat|steak|ribs|mince|minced/.test(lower))               return { icon: 'food-steak',       bg: '#fee2e2', color: '#dc2626' };
+  return { icon: 'silverware-fork-knife', bg: '#f3f4f6', color: '#6b7280' };
+}
+const DAY_SHORT: Record<string, string> = {
+  Monday: 'MON', Tuesday: 'TUE', Wednesday: 'WED', Thursday: 'THU', Friday: 'FRI',
+};
 
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function HomeScreen() {
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
   const setCurrentUser = useAppStore(s => s.setCurrentUser);
+  const currentUser = useAppStore(s => s.currentUser);
+  const setTeamOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
+  const checkinEnabled = useAppStore(s => s.checkinEnabled);
+  const navigation = useNavigation<any>();
+
+  function handleCityCardPress(office: string) {
+    setTeamOfficeFilter([office]);
+    navigation.navigate('Team');
+  }
+
+  const now = relevantWeekDate();
+  const lunchYear = isoWeekYear(now);
+  const lunchWeek = isoWeekNumber(now);
+
+  const { data: lunchMenu, refetch: refetchMenu } = useQuery<LunchWeek>({
+    queryKey: ['lunchMenu', lunchYear, lunchWeek],
+    queryFn: () => getLunchMenu(lunchYear, lunchWeek),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: lunchOrders, refetch: refetchOrders } = useQuery<Record<number, string>>({
+    queryKey: ['lunchOrders', currentUser?.id, lunchYear, lunchWeek],
+    queryFn: () => getLunchOrders(currentUser!.id, lunchYear, lunchWeek),
+    enabled: !!currentUser,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [isLunchRefreshing, setIsLunchRefreshing] = useState(false);
+
+  async function handlePullRefresh() {
+    setIsLunchRefreshing(true);
+    await Promise.all([refetch(), refetchMenu(), refetchOrders()]);
+    setIsLunchRefreshing(false);
+  }
 
   const { data, refetch, isRefetching, isLoading, isError, error } = useQuery<OfficeSummary[]>({
     queryKey: ['officeSummaries'],
@@ -71,56 +184,160 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={isLunchRefreshing}
+          onRefresh={handlePullRefresh}
+          tintColor="#006559"
+          colors={['#006559']}
+        />
+      }
+    >
       <View style={styles.headerRow}>
         {isRefetching && <ActivityIndicator size="small" color="#1e1b14" />}
+        {!checkinEnabled && (
+          <View style={styles.checkinBadge}>
+            <Icon name="map-marker-off-outline" size={13} color="#b45309" />
+            <Text style={styles.checkinBadgeText}>No location check-ins</Text>
+          </View>
+        )}
       </View>
-      {(data ?? []).map(summary => (
-        <OfficeSummaryCard key={summary.office} summary={summary} />
-      ))}
+      <View style={styles.grid}>
+        {(data ?? []).map(summary => (
+          <OfficeSummaryCard key={summary.office} summary={summary} onPress={() => handleCityCardPress(summary.office)} />
+        ))}
+      </View>
+      {lunchMenu && (
+        <LunchWeekCard
+          menu={lunchMenu}
+          orders={lunchOrders ?? {}}
+          onPress={() => navigation.navigate('Lunch')}
+        />
+      )}
     </ScrollView>
   );
 }
 
-function OfficeSummaryCard({ summary }: { summary: OfficeSummary }) {
+function OfficeSummaryCard({ summary, onPress }: { summary: OfficeSummary; onPress: () => void }) {
   const total = summary.available + summary.away + summary.busy + summary.offline;
-  const segments = [
+  const city = CITY_CONFIG[summary.office];
+
+  const { data: weather } = useQuery<WeatherInfo>({
+    queryKey: ['weather', summary.office],
+    queryFn: () => fetchWeather(city.lat, city.lon),
+    staleTime: 10 * 60 * 1000,
+    enabled: !!city,
+  });
+
+  const dots = [
     { color: '#22c55e', count: summary.available },
-    { color: '#eab308', count: summary.away },
+    { color: '#f97316', count: summary.away },
     { color: '#ef4444', count: summary.busy },
     { color: '#9ca3af', count: summary.offline },
   ];
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{summary.office}</Text>
-        <Text style={styles.cardTotal}>{total} people</Text>
-      </View>
-      <View style={styles.statusRow}>
-        {segments.map((s, i) => (
-          <View key={i} style={styles.statusItem}>
-            <View style={[styles.statusDot, { backgroundColor: s.color }]} />
-            <Text style={styles.statusCount}>{s.count}</Text>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.cityCard}>
+    <ImageBackground
+      source={city?.image}
+      style={StyleSheet.absoluteFill}
+      imageStyle={styles.cityCardImage}
+    >
+      <View style={styles.cityCardOverlay}>
+        {/* Top row: count + weather */}
+        <View style={styles.cityCardTop}>
+          <View style={styles.cityCountRow}>
+            <Text style={styles.cityCount}>{String(total).padStart(2, '0')}</Text>
+            <Icon name="account-group" size={18} color="rgba(255,255,255,0.75)" style={styles.cityCountIcon} />
           </View>
-        ))}
+          {weather && (
+            <View style={styles.weatherBadge}>
+              <Icon name={weather.icon} size={18} color="#fff" />
+              <Text style={styles.weatherTemp}>{weather.temp}°</Text>
+            </View>
+          )}
+        </View>
+        {/* City name */}
+        <Text style={styles.cityName}>{summary.office.toUpperCase()}</Text>
+        {/* Status dots + segment bar */}
+        <View>
+          <View style={styles.cityDots}>
+            {dots.filter(d => d.count > 0).map((d, i) => (
+              <View key={i} style={[styles.cityDot, { backgroundColor: d.color }]} />
+            ))}
+          </View>
+          <View style={styles.citySegmentBar}>
+            {dots.map((d, i) =>
+              d.count > 0 ? (
+                <View
+                  key={i}
+                  style={[
+                    styles.citySegmentFill,
+                    { flex: d.count / total, backgroundColor: d.color },
+                    i === 0 && styles.segmentFirst,
+                    i === dots.length - 1 && styles.segmentLast,
+                  ]}
+                />
+              ) : null,
+            )}
+          </View>
+        </View>
       </View>
-      <View style={styles.segmentBar}>
-        {segments.map((s, i) =>
-          s.count > 0 ? (
-            <View
-              key={i}
-              style={[
-                styles.segmentFill,
-                { flex: s.count / total, backgroundColor: s.color },
-                i === 0 && styles.segmentFirst,
-                i === segments.length - 1 && styles.segmentLast,
-              ]}
-            />
-          ) : null,
-        )}
+    </ImageBackground>
+    </TouchableOpacity>
+  );
+}
+
+function LunchWeekCard({
+  menu,
+  orders,
+  onPress,
+}: {
+  menu: LunchWeek;
+  orders: Record<number, string>;
+  onPress: () => void;
+}) {
+  const days = (menu.days ?? []).filter(d => !d.holiday);
+
+  return (
+    <TouchableOpacity style={styles.lunchCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.lunchCardHeader}>
+        <View style={styles.lunchCardTitleRow}>
+          <Icon name="silverware-fork-knife" size={16} color="#006559" />
+          <Text style={styles.lunchCardTitle}>This Week's Lunch</Text>
+        </View>
+        <Text style={styles.lunchCardWeek}>{menu.dateLabel ?? `Week ${menu.id}`}</Text>
       </View>
-    </View>
+      <View style={styles.lunchDayRow}>
+        {days.map(day => {
+          const ordered = orders[day.id];
+          const tile = ordered ? getFoodTile(ordered) : null;
+          const dateNum = day.date ? new Date(day.date).getUTCDate() : '';
+          const shortDay = DAY_SHORT[day.dayOfWeek] ?? day.dayOfWeek.slice(0, 3).toUpperCase();
+          return (
+            <View key={day.id} style={styles.lunchDayCol}>
+              <Text style={styles.lunchDayName}>{shortDay}</Text>
+              <Text style={styles.lunchDayDate}>{dateNum}</Text>
+              {tile ? (
+                <View style={[styles.lunchFoodTile, { backgroundColor: tile.bg }]}>
+                  <Icon name={tile.icon} size={18} color={tile.color} />
+                </View>
+              ) : (
+                <View style={styles.lunchEmptyTile} />
+              )}
+              {ordered && ordered !== 'No thanks' ? (
+                <Text style={styles.lunchFoodLabel} numberOfLines={1}>{ordered}</Text>
+              ) : (
+                <Text style={styles.lunchEmptyLabel}>—</Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -137,8 +354,9 @@ function hardTimeout(ms: number): Promise<never> {
 async function doFetch(): Promise<OfficeSummary[]> {
   const results = await Promise.allSettled(
     OFFICES.map(async office => {
+      const EXCLUDED = /meeting room|phone booth|admin/i;
       const users = await getUsersByOffice(office);
-      const activeIds = users.filter(u => u.accountEnabled).map(u => u.id);
+      const activeIds = users.filter(u => u.accountEnabled && !EXCLUDED.test(u.displayName)).map(u => u.id);
       const presences = activeIds.length
         ? await getPresenceForUsers(activeIds)
         : [];
@@ -184,14 +402,60 @@ async function doFetch(): Promise<OfficeSummary[]> {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#C7D3D3', padding: 16 },
+  container: { flex: 1, backgroundColor: '#C7D3D3' },
+  scrollContent: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 15, color: '#555' },
   retryBtn: { backgroundColor: '#006559', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 },
   retryBtnText: { color: '#fff', fontWeight: '600' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, height: 24 },
+  checkinBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#fef3c7', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+    marginLeft: 'auto',
+  },
+  checkinBadgeText: { fontSize: 11, fontWeight: '600', color: '#b45309' },
   header: { fontSize: 32, fontWeight: '800', color: '#1e1b14', letterSpacing: -0.5 },
-  card: {
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
+  cityCard: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  cityCardImage: { borderRadius: 16 },
+  cityCardOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  cityCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  cityCountRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  cityCount: { fontSize: 38, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  cityCountIcon: { marginBottom: 6 },
+  weatherBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  weatherTemp: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  cityName: { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 1.2 },
+  cityDots: { flexDirection: 'row', gap: 5, marginBottom: 6 },
+  cityDot: { width: 8, height: 8, borderRadius: 4 },
+  citySegmentBar: { height: 5, flexDirection: 'row', borderRadius: 3, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.2)' },
+  citySegmentFill: {},
+  segmentFirst: { borderTopLeftRadius: 3, borderBottomLeftRadius: 3 },
+  segmentLast: { borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+
+  // Lunch card
+  lunchCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
@@ -202,15 +466,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
-  cardTotal: { fontSize: 12, color: '#9ca3af', fontWeight: '500' },
-  statusRow: { flexDirection: 'row', gap: 16, marginBottom: 10 },
-  statusItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusCount: { fontSize: 14, fontWeight: '700', color: '#111' },
-  segmentBar: { height: 8, flexDirection: 'row', borderRadius: 4, overflow: 'hidden', backgroundColor: '#e5e7eb' },
-  segmentFill: {},
-  segmentFirst: { borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
-  segmentLast: { borderTopRightRadius: 4, borderBottomRightRadius: 4 },
+  lunchCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  lunchCardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  lunchCardTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
+  lunchCardWeek: { fontSize: 12, color: '#9ca3af', fontWeight: '500' },
+  lunchDayRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  lunchDayCol: { flex: 1, alignItems: 'center', gap: 4 },
+  lunchDayName: { fontSize: 10, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.5 },
+  lunchDayDate: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  lunchFoodTile: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  lunchEmptyTile: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb', borderStyle: 'dashed' },
+  lunchFoodLabel: { fontSize: 9, color: '#374151', fontWeight: '600', textAlign: 'center', maxWidth: 52 },
+  lunchEmptyLabel: { fontSize: 11, color: '#d1d5db', fontWeight: '500' },
 });

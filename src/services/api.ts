@@ -7,6 +7,7 @@ import type {
   UserData,
   HistoricalLocation,
   LunchWeek,
+  UserSettings,
 } from '../models';
 
 const BASE_URL = 'https://fd-falcon.azurewebsites.net';
@@ -14,7 +15,10 @@ const CODE = 'OahMqpTnWi6VHfSDH9bU442hVozo4Qksjl36mPsrcVKodK5NaHfFVQ==';
 
 async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { signal });
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}${body ? ': ' + body.slice(0, 120) : ''}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -216,6 +220,30 @@ export async function getAbsenceTypes(
   return apiGet<Absence[]>(`/api/absences?code=${CODE}`, signal);
 }
 
+// ── User Settings ────────────────────────────────────────────────────────────
+
+export async function getUserSettings(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<UserSettings> {
+  return apiGet<UserSettings>(`/api/user/${userId}/settings?code=${CODE}`, signal);
+}
+
+export async function updateUserSettings(
+  userId: string,
+  settings: Partial<UserSettings>,
+  signal?: AbortSignal,
+): Promise<UserSettings> {
+  const res = await fetch(`${BASE_URL}/api/user/${userId}/settings?code=${CODE}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+    signal,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<UserSettings>;
+}
+
 // ── User Data ────────────────────────────────────────────────────────────────
 
 export async function getUserData(
@@ -233,6 +261,129 @@ export async function getUserInformation(
 ): Promise<UserData[]> {
   const query = `?ids=${encodeURIComponent(userId)}&code=${CODE}`;
   return apiGet<UserData[]>(`/api/user-information${query}`, signal);
+}
+
+// ── Tempo / Time Registration ─────────────────────────────────────────────────
+
+export interface TempoWorklogEntry {
+  id: number;
+  issueKey: string | null;
+  issueSummary: string | null;
+  date: string | null;
+  startTime: string | null;
+  timeSpentSeconds: number;
+  comment: string | null;
+}
+
+export interface JiraIssue {
+  key: string;
+  summary: string;
+}
+
+export interface TempoAbsenceType {
+  id: number;
+  name: string;
+  jiraKey: string | null;
+  sortOrder: number;
+}
+
+export async function getTempoAbsenceTypes(signal?: AbortSignal): Promise<TempoAbsenceType[]> {
+  return apiGet<TempoAbsenceType[]>(`/api/tempo/absence-types?code=${CODE}`, signal);
+}
+
+export async function getTempoWorklogs(
+  userId: string,
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+): Promise<TempoWorklogEntry[]> {
+  return apiGet<TempoWorklogEntry[]>(
+    `/api/tempo/worklogs/${userId}?from=${from}&to=${to}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function postTempoWorklog(
+  userId: string,
+  entry: { date: string; startTime: string; endTime: string; timeSpentSeconds: number; issueKey: string; comment?: string },
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/tempo/worklogs/${userId}?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+  return true;
+}
+
+export async function deleteTempoWorklog(
+  userId: string,
+  worklogId: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/tempo/worklogs/${userId}/${worklogId}?code=${CODE}`,
+    { method: 'DELETE', signal },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+}
+
+export async function searchJiraIssues(
+  query: string,
+  signal?: AbortSignal,
+): Promise<JiraIssue[]> {
+  return apiGet<JiraIssue[]>(
+    `/api/jira/issues?query=${encodeURIComponent(query)}&code=${CODE}`,
+    signal,
+  );
+}
+
+// ── Worklog Keyword Rules ─────────────────────────────────────────────────────
+
+export interface WorklogKeywordRule {
+  id: number;
+  keyword: string;
+  jiraKey: string;
+}
+
+export async function getWorklogKeywordRules(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<WorklogKeywordRule[]> {
+  return apiGet<WorklogKeywordRule[]>(`/api/user/${userId}/worklog-keyword-rules?code=${CODE}`, signal);
+}
+
+export async function addWorklogKeywordRule(
+  userId: string,
+  keyword: string,
+  jiraKey: string,
+  signal?: AbortSignal,
+): Promise<WorklogKeywordRule> {
+  return apiPost<WorklogKeywordRule>(
+    `/api/user/${userId}/worklog-keyword-rules?code=${CODE}`,
+    { keyword, jiraKey },
+    signal,
+  );
+}
+
+export async function deleteWorklogKeywordRule(
+  userId: string,
+  ruleId: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/worklog-keyword-rules/${ruleId}?code=${CODE}`,
+    { method: 'DELETE', signal },
+  );
+  if (!res.ok) throw new Error(`API ${res.status}`);
 }
 
 export async function registerUserData(

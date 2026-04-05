@@ -19,6 +19,7 @@ export interface Employee {
   mobilePhone: string | null;
   userPrincipalName: string | null;
   location: string;
+  office: string;
   lastKnownLocation: string;
   locationChanged: Date | null;
   teamsAvailability: string;
@@ -29,6 +30,7 @@ export interface Employee {
   absenceComment: string | null;
   absenceImage: AbsenceType | null;
   photo: string | null; // base64 URI
+  slackMemberId: string | null;
 }
 
 export interface UserLocation {
@@ -45,6 +47,10 @@ export interface KnownLocation {
     coordinates: [number, number]; // [lat, lon]
   };
   distance?: number;
+}
+
+export interface UserSettings {
+  checkinEnabled: boolean;
 }
 
 export interface UserAbsence {
@@ -92,6 +98,9 @@ export interface UserData {
   startDate: string | null;
   entryDate: string;
   entryBy: string | null;
+  slackMemberId: string | null;
+  jiraUsername: string | null;
+  secondCalendarEmail: string | null;
 }
 
 export interface TeamsPresence {

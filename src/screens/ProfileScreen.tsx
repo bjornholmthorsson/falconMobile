@@ -11,20 +11,27 @@ import {
   Image,
   Modal,
   Linking,
+  Switch,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getMe, updateUser, getUserPhoto } from '../services/graphService';
-import { getUserData, registerUserData } from '../services/api';
-import { signOut } from '../services/authService';
+import {
+  getUserData, registerUserData, updateUserSettings, getUserSettings,
+  getWorklogKeywordRules, addWorklogKeywordRule, deleteWorklogKeywordRule,
+  type WorklogKeywordRule,
+} from '../services/api';
+import { signOut, signInSecondAccount, signOutSecondAccount, getSecondAccountEmail } from '../services/authService';
 import { useAppStore } from '../store/appStore';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version: APP_VERSION } = require('../../package.json') as { version: string };
 
 export default function ProfileScreen() {
-  const currentUser     = useAppStore(s => s.currentUser);
-  const setCurrentUser  = useAppStore(s => s.setCurrentUser);
+  const currentUser        = useAppStore(s => s.currentUser);
+  const setCurrentUser     = useAppStore(s => s.setCurrentUser);
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
+  const checkinEnabled     = useAppStore(s => s.checkinEnabled);
+  const setCheckinEnabled  = useAppStore(s => s.setCheckinEnabled);
   const qc = useQueryClient();
 
   const { data: photo } = useQuery({
@@ -40,9 +47,160 @@ export default function ProfileScreen() {
     enabled: !!currentUser,
   });
 
+  const [savingCheckin, setSavingCheckin] = useState(false);
+
+  async function handleToggleCheckin(value: boolean) {
+    if (!currentUser) return;
+    setCheckinEnabled(value);
+    setSavingCheckin(true);
+    try {
+      await updateUserSettings(currentUser.id, { checkinEnabled: value });
+    } catch {
+      // API not yet available — setting is kept locally until backend is deployed
+    } finally {
+      setSavingCheckin(false);
+    }
+  }
+
   const [editMobileOpen, setEditMobileOpen] = useState(false);
   const [mobile, setMobile] = useState(currentUser?.mobilePhone ?? '');
+  const [editSlackOpen, setEditSlackOpen] = useState(false);
+  const [slackId, setSlackId] = useState(ud?.slackMemberId ?? '');
+  const [editJiraOpen, setEditJiraOpen] = useState(false);
+  const [jiraUsername, setJiraUsername] = useState(ud?.jiraUsername ?? '');
+  const [cal2Email, setCal2Email]       = useState<string | null>(null);
+  const [cal2Loading, setCal2Loading]   = useState(false);
+
+  React.useEffect(() => {
+    getSecondAccountEmail().then(setCal2Email);
+  }, []);
   const [saving, setSaving] = useState(false);
+
+  // ── Keyword rules ────────────────────────────────────────────────────────
+  const { data: keywordRules = [] } = useQuery<WorklogKeywordRule[]>({
+    queryKey: ['keywordRules', currentUser?.id],
+    queryFn:  () => getWorklogKeywordRules(currentUser!.id),
+    enabled:  !!currentUser,
+  });
+
+  const [addRuleOpen, setAddRuleOpen]     = useState(false);
+  const [ruleKeyword, setRuleKeyword]     = useState('');
+  const [ruleJiraKey, setRuleJiraKey]     = useState('');
+
+  const { mutate: addRule, isPending: addingRule } = useMutation({
+    mutationFn: () => addWorklogKeywordRule(currentUser!.id, ruleKeyword.trim(), ruleJiraKey.trim()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['keywordRules'] });
+      setAddRuleOpen(false);
+      setRuleKeyword('');
+      setRuleJiraKey('');
+    },
+    onError: (err: any) => Alert.alert('Error', err?.message ?? 'Could not add rule'),
+  });
+
+  const { mutate: deleteRule } = useMutation({
+    mutationFn: (ruleId: number) => deleteWorklogKeywordRule(currentUser!.id, ruleId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['keywordRules'] }),
+    onError: (err: any) => Alert.alert('Error', err?.message ?? 'Could not delete rule'),
+  });
+
+  function confirmDeleteRule(rule: WorklogKeywordRule) {
+    Alert.alert('Delete rule', `Remove "${rule.keyword}" → ${rule.jiraKey}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteRule(rule.id) },
+    ]);
+  }
+
+  async function handleDebugCal2() {
+    setCal2Loading(true);
+    try {
+      const { getSecondAccountToken } = await import('../services/authService');
+      const token = await getSecondAccountToken();
+      if (!token) { Alert.alert('Debug', 'No token found in storage'); return; }
+
+      const start = encodeURIComponent('2026-04-01T00:00:00');
+      const end   = encodeURIComponent('2026-04-01T23:59:59');
+      const url   = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${start}&endDateTime=${end}&$select=subject,start,end,isAllDay,showAs&$top=20`;
+      const res   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const body  = await res.text();
+
+      if (!res.ok) {
+        Alert.alert(`HTTP ${res.status}`, body.slice(0, 400));
+        return;
+      }
+
+      const data = JSON.parse(body);
+      const events = (data.value ?? []) as any[];
+      if (events.length === 0) {
+        Alert.alert('Debug', 'Token OK — but 0 events returned for Apr 1');
+      } else {
+        Alert.alert(
+          `${events.length} event(s) Apr 1`,
+          events.map((e: any) => `• ${e.subject} [isAllDay:${e.isAllDay} showAs:${e.showAs}]`).join('\n'),
+        );
+      }
+    } catch (e: any) {
+      Alert.alert('Debug error', e?.message ?? String(e));
+    } finally {
+      setCal2Loading(false);
+    }
+  }
+
+  async function handleConnectCal2() {
+    setCal2Loading(true);
+    try {
+      const email = await signInSecondAccount();
+      setCal2Email(email);
+      qc.invalidateQueries({ queryKey: ['calendar'] });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Sign-in failed');
+    } finally {
+      setCal2Loading(false);
+    }
+  }
+
+  async function handleDisconnectCal2() {
+    Alert.alert('Disconnect', 'Remove the second calendar account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect', style: 'destructive', onPress: async () => {
+          await signOutSecondAccount();
+          setCal2Email(null);
+          qc.invalidateQueries({ queryKey: ['calendar'] });
+        },
+      },
+    ]);
+  }
+
+  async function handleSaveJira() {
+    if (!currentUser) return;
+    setSaving(true);
+    try {
+      await registerUserData(currentUser.id, { jiraUsername: jiraUsername.trim() || null });
+      qc.invalidateQueries({ queryKey: ['userData'] });
+      setEditJiraOpen(false);
+      Alert.alert('Saved', 'Jira username updated.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveSlack() {
+    if (!currentUser) return;
+    setSaving(true);
+    try {
+      await registerUserData(currentUser.id, { slackMemberId: slackId.trim() || null });
+      qc.invalidateQueries({ queryKey: ['userData'] });
+      setEditSlackOpen(false);
+      Alert.alert('Saved', 'Slack Member ID updated.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSaveMobile() {
     if (!currentUser) return;
@@ -147,6 +305,81 @@ export default function ProfileScreen() {
           </View>
           <Icon name="chevron-right" size={20} color="#9ca3af" />
         </TouchableOpacity>
+        <View style={styles.settingsDivider} />
+        <TouchableOpacity style={styles.settingsRow} onPress={() => { setSlackId(ud?.slackMemberId ?? ''); setEditSlackOpen(true); }} activeOpacity={0.7}>
+          <View style={styles.settingsRowLeft}>
+            <View style={styles.settingsIcon}>
+              <Icon name="slack" size={20} color="#4A154B" />
+            </View>
+            <View>
+              <Text style={styles.settingsRowTitle}>Slack Member ID</Text>
+              <Text style={styles.settingsRowSub}>{ud?.slackMemberId ? ud.slackMemberId : 'Not set'}</Text>
+            </View>
+          </View>
+          <Icon name="chevron-right" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <View style={styles.settingsDivider} />
+        <TouchableOpacity style={styles.settingsRow} onPress={() => { setJiraUsername(ud?.jiraUsername ?? ''); setEditJiraOpen(true); }} activeOpacity={0.7}>
+          <View style={styles.settingsRowLeft}>
+            <View style={styles.settingsIcon}>
+              <Icon name="jira" size={20} color="#0052CC" />
+            </View>
+            <View>
+              <Text style={styles.settingsRowTitle}>Jira Username</Text>
+              <Text style={styles.settingsRowSub}>{ud?.jiraUsername ? ud.jiraUsername : 'Not set — required for time logging'}</Text>
+            </View>
+          </View>
+          <Icon name="chevron-right" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <View style={styles.settingsDivider} />
+        <View style={styles.settingsRow}>
+          <View style={styles.settingsRowLeft}>
+            <View style={[styles.settingsIcon, { backgroundColor: '#f5f3ff' }]}>
+              <Icon name="calendar-account-outline" size={20} color="#7c3aed" />
+            </View>
+            <View>
+              <Text style={styles.settingsRowTitle}>Second Calendar</Text>
+              <Text style={styles.settingsRowSub}>{cal2Email ?? 'Not connected'}</Text>
+            </View>
+          </View>
+          {cal2Loading ? (
+            <ActivityIndicator size="small" color="#7c3aed" />
+          ) : cal2Email ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity onPress={handleDebugCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 13, color: '#7c3aed', fontWeight: '600' }}>Debug</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDisconnectCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 13, color: '#ef4444', fontWeight: '600' }}>Disconnect</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity onPress={handleConnectCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={{ fontSize: 13, color: '#7c3aed', fontWeight: '600' }}>Connect</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.settingsDivider} />
+        <View style={styles.settingsRow}>
+          <View style={styles.settingsRowLeft}>
+            <View style={styles.settingsIcon}>
+              <Icon name="map-marker-check-outline" size={20} color="#006559" />
+            </View>
+            <View>
+              <Text style={styles.settingsRowTitle}>Check-in to known locations</Text>
+              <Text style={styles.settingsRowSub}>Record your check-ins</Text>
+            </View>
+          </View>
+          {savingCheckin
+            ? <ActivityIndicator size="small" color="#006559" />
+            : <Switch
+                value={checkinEnabled}
+                onValueChange={handleToggleCheckin}
+                trackColor={{ false: '#d1d5db', true: '#006559' }}
+                thumbColor="#fff"
+              />
+          }
+        </View>
       </View>
 
       {/* ── Member Details ── */}
@@ -168,6 +401,40 @@ export default function ProfileScreen() {
               {i < arr.length - 1 && <View style={styles.memberDivider} />}
             </React.Fragment>
           ))}
+      </View>
+
+      {/* ── Keyword Rules ── */}
+      <Text style={styles.sectionHeader}>Worklog Keyword Rules</Text>
+      <View style={styles.settingsCard}>
+        {keywordRules.map((rule, i) => (
+          <React.Fragment key={rule.id}>
+            {i > 0 && <View style={styles.settingsDivider} />}
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsRowLeft}>
+                <View style={[styles.settingsIcon, { backgroundColor: '#eff6ff' }]}>
+                  <Icon name="tag-outline" size={20} color="#2563eb" />
+                </View>
+                <View>
+                  <Text style={styles.settingsRowTitle}>{rule.keyword}</Text>
+                  <Text style={[styles.settingsRowSub, { color: '#0052CC', fontWeight: '600' }]}>{rule.jiraKey}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => confirmDeleteRule(rule)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="trash-can-outline" size={20} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+          </React.Fragment>
+        ))}
+        {keywordRules.length > 0 && <View style={styles.settingsDivider} />}
+        <TouchableOpacity style={styles.settingsRow} onPress={() => setAddRuleOpen(true)} activeOpacity={0.7}>
+          <View style={styles.settingsRowLeft}>
+            <View style={[styles.settingsIcon, { backgroundColor: '#e6f4f1' }]}>
+              <Icon name="plus" size={20} color="#006559" />
+            </View>
+            <Text style={styles.settingsRowTitle}>Add keyword rule</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color="#9ca3af" />
+        </TouchableOpacity>
       </View>
 
       {/* ── App Info ── */}
@@ -193,6 +460,100 @@ export default function ProfileScreen() {
         <Icon name="help-circle-outline" size={18} color="#6b7280" />
         <Text style={styles.helpText}>Help Desk</Text>
       </TouchableOpacity>
+
+      {/* ── Edit Slack Modal ── */}
+      <Modal visible={editSlackOpen} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setEditSlackOpen(false)}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Slack Member ID</Text>
+              <TouchableOpacity onPress={handleSaveSlack}>
+                {saving
+                  ? <ActivityIndicator color="#006559" />
+                  : <Text style={styles.modalDone}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.mobileInput}
+              value={slackId}
+              onChangeText={setSlackId}
+              placeholder="e.g. U090LDTS30B"
+              autoCapitalize="characters"
+              autoFocus
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Edit Jira Modal ── */}
+      <Modal visible={editJiraOpen} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setEditJiraOpen(false)}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Jira Username</Text>
+              <TouchableOpacity onPress={handleSaveJira}>
+                {saving
+                  ? <ActivityIndicator color="#006559" />
+                  : <Text style={styles.modalDone}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.mobileInput}
+              value={jiraUsername}
+              onChangeText={setJiraUsername}
+              placeholder="e.g. bjornh"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Add Keyword Rule Modal ── */}
+      <Modal visible={addRuleOpen} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => { setAddRuleOpen(false); setRuleKeyword(''); setRuleJiraKey(''); }}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Add Keyword Rule</Text>
+              <TouchableOpacity
+                onPress={() => addRule()}
+                disabled={!ruleKeyword.trim() || !ruleJiraKey.trim() || addingRule}
+              >
+                {addingRule
+                  ? <ActivityIndicator color="#006559" />
+                  : <Text style={[styles.modalDone, (!ruleKeyword.trim() || !ruleJiraKey.trim()) && { color: '#9ca3af' }]}>Add</Text>}
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.mobileInput}
+              value={ruleKeyword}
+              onChangeText={setRuleKeyword}
+              placeholder="Keyword (e.g. sales)"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <TextInput
+              style={[styles.mobileInput, { marginTop: 0 }]}
+              value={ruleJiraKey}
+              onChangeText={setRuleJiraKey}
+              placeholder="Jira ticket (e.g. SALESMKT-248)"
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Edit Mobile Modal ── */}
       <Modal visible={editMobileOpen} transparent animationType="slide">

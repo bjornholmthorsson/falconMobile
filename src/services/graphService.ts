@@ -6,7 +6,7 @@
  * fetch is implemented natively and runs fully off-thread.
  */
 import type { User, TeamsPresence } from '../models';
-import { getAccessToken } from './authService';
+import { getAccessToken, getSecondAccountToken } from './authService';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
@@ -191,6 +191,73 @@ export async function getUserPhoto(
   } catch {
     return null;
   }
+}
+
+// ── Calendar ──────────────────────────────────────────────────────────────────
+
+export interface CalendarEvent {
+  id: string;
+  subject: string;
+  start: Date;
+  end: Date;
+  durationSeconds: number;
+  isAllDay: boolean;
+}
+
+export async function getCalendarEvents(
+  dateStr: string, // YYYY-MM-DD
+  signal?: AbortSignal,
+): Promise<CalendarEvent[]> {
+  const start = `${dateStr}T00:00:00`;
+  const end   = `${dateStr}T23:59:59`;
+  const params =
+    `startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}` +
+    `&$select=id,subject,start,end,isAllDay,showAs&$orderby=start/dateTime&$top=20`;
+
+  function parseEvents(value: any[]): CalendarEvent[] {
+    return value
+      .filter((e: any) => !e.isAllDay && e.showAs !== 'free' && e.showAs !== 'workingElsewhere')
+      .map((e: any) => {
+        const s = new Date(e.start.dateTime);
+        const n = new Date(e.end.dateTime);
+        return {
+          id:              e.id,
+          subject:         e.subject ?? '(No title)',
+          start:           s,
+          end:             n,
+          durationSeconds: Math.max(0, Math.round((n.getTime() - s.getTime()) / 1000)),
+          isAllDay:        false,
+        };
+      })
+      .filter(e => e.durationSeconds < 86400);
+  }
+
+  const primary = await graphGet<{ value: any[] }>(`/me/calendarView?${params}`, signal);
+  const events  = parseEvents(primary.value ?? []);
+
+  // Second account — uses its own OAuth token fetched directly
+  try {
+    const secondToken = await getSecondAccountToken();
+    if (secondToken) {
+      const res = await fetch(
+        `${GRAPH}/me/calendarView?${params}`,
+        { headers: { Authorization: `Bearer ${secondToken}` }, signal },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const secondEvents = parseEvents(data.value ?? []);
+        const ids = new Set(events.map(e => e.id));
+        for (const ev of secondEvents) {
+          if (!ids.has(ev.id)) events.push(ev);
+        }
+        events.sort((a, b) => a.start.getTime() - b.start.getTime());
+      }
+    }
+  } catch {
+    // Second account inaccessible — silently skip
+  }
+
+  return events;
 }
 
 // ── Teams messaging ───────────────────────────────────────────────────────────

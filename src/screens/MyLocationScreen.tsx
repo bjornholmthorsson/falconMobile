@@ -31,7 +31,8 @@ import { useAppStore } from '../store/appStore';
 import type { HistoricalLocation, KnownLocation } from '../models';
 
 export default function MyLocationScreen() {
-  const currentUser = useAppStore(s => s.currentUser);
+  const currentUser    = useAppStore(s => s.currentUser);
+  const checkinEnabled = useAppStore(s => s.checkinEnabled);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loadingKnown, setLoadingKnown] = useState(false);
   const [loadingAdd, setLoadingAdd]     = useState(false);
@@ -44,8 +45,9 @@ export default function MyLocationScreen() {
     qc.invalidateQueries({ queryKey: ['knownUserLocations', currentUser?.id] });
   }, [currentUser?.id, qc]));
 
-  // Centre map on user's current GPS position on mount
+  // Centre map on user's current GPS position on mount — only when check-in is enabled
   useEffect(() => {
+    if (!checkinEnabled) return;
     requestLocationPermission().then(granted => {
       if (!granted) return;
       getCurrentPosition().then(pos => {
@@ -57,7 +59,7 @@ export default function MyLocationScreen() {
         });
       }).catch(() => {});
     });
-  }, []);
+  }, [checkinEnabled]);
 
   const dateLabel = selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
+import { getUserSettings } from '../services/api';
 import { useAppStore } from '../store/appStore';
 
 /**
@@ -13,6 +14,7 @@ export function useLoadCurrentUser() {
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
   const setCurrentUser = useAppStore(s => s.setCurrentUser);
   const setAuthRestored = useAppStore(s => s.setAuthRestored);
+  const setCheckinEnabled = useAppStore(s => s.setCheckinEnabled);
 
   // Restore auth state once on cold start
   const restoredRef = useRef(false);
@@ -37,11 +39,14 @@ export function useLoadCurrentUser() {
     if (!isAuthenticated || currentUser || fetchedRef.current) return;
     fetchedRef.current = true;
     getMe()
-      .then(user => setCurrentUser(user))
+      .then(user => {
+        setCurrentUser(user);
+        return getUserSettings(user.id);
+      })
+      .then(settings => setCheckinEnabled(settings.checkinEnabled))
       .catch(() => {
         fetchedRef.current = false;
-        // Don't redirect to login — let the user stay on HomeScreen
-        // even if the profile load fails (non-critical background fetch)
+        setCheckinEnabled(false); // settings unavailable — keep location off until next load
       });
   }, [isAuthenticated, currentUser]);
 }
