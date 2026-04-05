@@ -84,40 +84,42 @@ export default function HomeScreen() {
 
 function OfficeSummaryCard({ summary }: { summary: OfficeSummary }) {
   const total = summary.available + summary.away + summary.busy + summary.offline;
+  const segments = [
+    { color: '#22c55e', count: summary.available },
+    { color: '#eab308', count: summary.away },
+    { color: '#ef4444', count: summary.busy },
+    { color: '#9ca3af', count: summary.offline },
+  ];
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>{summary.office}</Text>
-      <View style={styles.bars}>
-        <Bar label="Available" count={summary.available} total={total} color="#22c55e" />
-        <Bar label="Away" count={summary.away} total={total} color="#eab308" />
-        <Bar label="Busy" count={summary.busy} total={total} color="#ef4444" />
-        <Bar label="Offline" count={summary.offline} total={total} color="#9ca3af" />
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>{summary.office}</Text>
+        <Text style={styles.cardTotal}>{total} people</Text>
       </View>
-    </View>
-  );
-}
-
-function Bar({
-  label,
-  count,
-  total,
-  color,
-}: {
-  label: string;
-  count: number;
-  total: number;
-  color: string;
-}) {
-  const pct = total > 0 ? count / total : 0;
-  return (
-    <View style={styles.barRow}>
-      <Text style={styles.barLabel}>{label}</Text>
-      <View style={styles.barTrack}>
-        <View style={[styles.barFill, { flex: pct, backgroundColor: color }]} />
-        <View style={{ flex: 1 - pct }} />
+      <View style={styles.statusRow}>
+        {segments.map((s, i) => (
+          <View key={i} style={styles.statusItem}>
+            <View style={[styles.statusDot, { backgroundColor: s.color }]} />
+            <Text style={styles.statusCount}>{s.count}</Text>
+          </View>
+        ))}
       </View>
-      <Text style={styles.barCount}>{count}</Text>
+      <View style={styles.segmentBar}>
+        {segments.map((s, i) =>
+          s.count > 0 ? (
+            <View
+              key={i}
+              style={[
+                styles.segmentFill,
+                { flex: s.count / total, backgroundColor: s.color },
+                i === 0 && styles.segmentFirst,
+                i === segments.length - 1 && styles.segmentLast,
+              ]}
+            />
+          ) : null,
+        )}
+      </View>
     </View>
   );
 }
@@ -191,20 +193,24 @@ const styles = StyleSheet.create({
   header: { fontSize: 32, fontWeight: '800', color: '#1e1b14', letterSpacing: -0.5 },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  cardTitle: { fontSize: 17, fontWeight: '600', marginBottom: 12, color: '#111' },
-  bars: { gap: 8 },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  barLabel: { width: 70, fontSize: 13, color: '#555' },
-  barTrack: { flex: 1, height: 12, flexDirection: 'row', borderRadius: 6, overflow: 'hidden', backgroundColor: '#e5e7eb' },
-  barFill: { borderRadius: 6 },
-  barCount: { width: 28, textAlign: 'right', fontSize: 13, color: '#555' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
+  cardTotal: { fontSize: 12, color: '#9ca3af', fontWeight: '500' },
+  statusRow: { flexDirection: 'row', gap: 16, marginBottom: 10 },
+  statusItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  statusCount: { fontSize: 14, fontWeight: '700', color: '#111' },
+  segmentBar: { height: 8, flexDirection: 'row', borderRadius: 4, overflow: 'hidden', backgroundColor: '#e5e7eb' },
+  segmentFill: {},
+  segmentFirst: { borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
+  segmentLast: { borderTopRightRadius: 4, borderBottomRightRadius: 4 },
 });
