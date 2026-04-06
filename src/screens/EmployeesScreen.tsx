@@ -44,7 +44,7 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
     }
   }
 
-  const { data: employees, refetch, isRefetching } = useQuery<Employee[]>({
+  const { data: employees, refetch, isLoading, isRefetching } = useQuery<Employee[]>({
     queryKey: ['employees', 'all'],
     queryFn: fetchAllEmployees,
     staleTime: 30_000,
@@ -71,6 +71,15 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
   }, [employees, search, officeFilter]);
 
   const totalCount = employees?.length ?? 0;
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#006559" />
+        <Text style={styles.loadingText}>Loading team…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -372,6 +381,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 24 },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#f5f5f5' },
+  loadingText: { fontSize: 15, color: '#6b7280' },
   subheading: {
     fontSize: 14,
     color: '#6b7280',
