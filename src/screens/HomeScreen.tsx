@@ -416,7 +416,6 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   checkinBadgeText: { fontSize: 11, fontWeight: '600', color: '#b45309' },
-  header: { fontSize: 32, fontWeight: '800', color: '#1e1b14', letterSpacing: -0.5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
   cityCard: {
     width: CARD_SIZE,

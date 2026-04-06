@@ -372,12 +372,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 24 },
-  heading: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1e1b14',
-    letterSpacing: -0.5,
-  },
   subheading: {
     fontSize: 14,
     color: '#6b7280',
@@ -425,7 +419,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  searchIcon: {},
   searchInput: {
     flex: 1,
     fontSize: 15,

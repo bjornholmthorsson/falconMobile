@@ -343,14 +343,6 @@ const styles = StyleSheet.create({
   deleteLink: { fontSize: 13, color: '#ef4444' },
   cardActions: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   setHomeLink: { fontSize: 13, color: '#006559', fontWeight: '600' },
-  setBtn: {
-    backgroundColor: '#006559',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  setBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   addBtn: {
     borderWidth: 1.5,
     borderColor: '#006559',

@@ -468,7 +468,7 @@ export default function TimeScreen() {
               <View style={[styles.fabOptionIcon, { backgroundColor: 'rgba(0,101,89,0.1)' }]}>
                 <Icon name="clock-plus-outline" size={22} color="#006559" />
               </View>
-              <Text style={styles.fabOptionText}>Log Worklog</Text>
+              <Text style={styles.fabOptionText}>Log Work</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -483,7 +483,7 @@ export default function TimeScreen() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Log Worklog</Text>
+              <Text style={styles.modalTitle}>Log Work</Text>
               <TouchableOpacity onPress={() => setActiveModal(null)}>
                 <Text style={styles.modalClose}>Cancel</Text>
               </TouchableOpacity>

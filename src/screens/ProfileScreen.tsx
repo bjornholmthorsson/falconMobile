@@ -111,41 +111,6 @@ export default function ProfileScreen() {
     ]);
   }
 
-  async function handleDebugCal2() {
-    setCal2Loading(true);
-    try {
-      const { getSecondAccountToken } = await import('../services/authService');
-      const token = await getSecondAccountToken();
-      if (!token) { Alert.alert('Debug', 'No token found in storage'); return; }
-
-      const start = encodeURIComponent('2026-04-01T00:00:00');
-      const end   = encodeURIComponent('2026-04-01T23:59:59');
-      const url   = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${start}&endDateTime=${end}&$select=subject,start,end,isAllDay,showAs&$top=20`;
-      const res   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const body  = await res.text();
-
-      if (!res.ok) {
-        Alert.alert(`HTTP ${res.status}`, body.slice(0, 400));
-        return;
-      }
-
-      const data = JSON.parse(body);
-      const events = (data.value ?? []) as any[];
-      if (events.length === 0) {
-        Alert.alert('Debug', 'Token OK — but 0 events returned for Apr 1');
-      } else {
-        Alert.alert(
-          `${events.length} event(s) Apr 1`,
-          events.map((e: any) => `• ${e.subject} [isAllDay:${e.isAllDay} showAs:${e.showAs}]`).join('\n'),
-        );
-      }
-    } catch (e: any) {
-      Alert.alert('Debug error', e?.message ?? String(e));
-    } finally {
-      setCal2Loading(false);
-    }
-  }
-
   async function handleConnectCal2() {
     setCal2Loading(true);
     try {
@@ -345,14 +310,9 @@ export default function ProfileScreen() {
           {cal2Loading ? (
             <ActivityIndicator size="small" color="#7c3aed" />
           ) : cal2Email ? (
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity onPress={handleDebugCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ fontSize: 13, color: '#7c3aed', fontWeight: '600' }}>Debug</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDisconnectCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ fontSize: 13, color: '#ef4444', fontWeight: '600' }}>Disconnect</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={handleDisconnectCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={{ fontSize: 13, color: '#ef4444', fontWeight: '600' }}>Disconnect</Text>
+            </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={handleConnectCal2} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={{ fontSize: 13, color: '#7c3aed', fontWeight: '600' }}>Connect</Text>
