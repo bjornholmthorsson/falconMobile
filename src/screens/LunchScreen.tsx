@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -7,8 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
-  FlatList,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -75,7 +73,7 @@ export default function LunchScreen() {
   const [week, setWeek]           = useState(isoWeekNumber(now));
   const [activeDayId, setActiveDayId] = useState<number | null>(null);
   const [selections, setSelections]   = useState<Record<number, string>>({});
-  const [submitting, setSubmitting]   = useState(false);
+  const [saving, setSaving]           = useState(false);
   const qc = useQueryClient();
 
   // Reset to the relevant week every time the screen comes into focus
@@ -125,39 +123,32 @@ export default function LunchScreen() {
     setActiveDayId(null);
   }
 
-  function toggleSelection(dayId: number, category: string) {
-    setSelections(prev => {
-      // Tapping the already-selected item de-selects it
-      if (prev[dayId] === category) {
-        const next = { ...prev };
-        delete next[dayId];
-        return next;
-      }
-      return { ...prev, [dayId]: category };
-    });
-  }
-
-  async function handleSubmit() {
+  async function toggleSelection(dayId: number, category: string) {
     if (!data || !userId) return;
-    const orders = Object.entries(selections).map(([dayId, category]) => ({
-      dayId: Number(dayId),
-      category,
-    }));
-    if (orders.length === 0) return;
 
-    setSubmitting(true);
+    // Compute next selections synchronously
+    const next = { ...selections };
+    if (next[dayId] === category) {
+      delete next[dayId];
+    } else {
+      next[dayId] = category;
+    }
+    setSelections(next);
+
+    // Auto-save immediately
+    const orders = Object.entries(next).map(([id, cat]) => ({
+      dayId: Number(id),
+      category: cat,
+    }));
+    setSaving(true);
     try {
-      const ok = await submitLunchOrders(userId, data.id, orders);
-      if (ok) {
-        qc.setQueryData(['lunchOrders', userId, year, week], { ...selections });
-        Alert.alert('Order placed', 'Your lunch selections have been saved.');
-      } else {
-        Alert.alert('Error', 'Could not save your order. Please try again.');
-      }
+      await submitLunchOrders(userId, data.id, orders);
+      qc.setQueryData(['lunchOrders', userId, year, week], { ...next });
     } catch {
-      Alert.alert('Error', 'Could not save your order. Please try again.');
+      // Revert optimistic update on failure
+      setSelections(selections);
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   }
 
@@ -293,6 +284,7 @@ export default function LunchScreen() {
               <View style={styles.orderCardHeader}>
                 <Icon name="cart-outline" size={18} color="#006559" />
                 <Text style={styles.orderCardTitle}>Current Order</Text>
+                {saving && <ActivityIndicator size="small" color="#006559" style={{ marginLeft: 8 }} />}
               </View>
 
               {orderItems.map(({ day, option }) => {
@@ -313,20 +305,6 @@ export default function LunchScreen() {
               })}
 
 
-              <TouchableOpacity
-                style={styles.placeOrderBtn}
-                onPress={handleSubmit}
-                disabled={submitting}
-                activeOpacity={0.85}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.placeOrderText}>
-                    Place Order · {orderItems.length} {orderItems.length === 1 ? 'meal' : 'meals'}
-                  </Text>
-                )}
-              </TouchableOpacity>
             </View>
           )}
 
@@ -470,17 +448,4 @@ const styles = StyleSheet.create({
   orderTotalLabel:   { fontSize: 15, fontWeight: '700', color: '#1e1b14' },
   orderTotalValue:   { fontSize: 15, fontWeight: '800', color: '#1e1b14' },
 
-  placeOrderBtn: {
-    backgroundColor: '#006559',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 4,
-    shadowColor: '#006559',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  placeOrderText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
