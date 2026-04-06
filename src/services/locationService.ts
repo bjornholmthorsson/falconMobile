@@ -114,6 +114,9 @@ async function handlePositionUpdate(
   const { latitude, longitude } = position.coords;
   const locationName = await resolveLocationName(latitude, longitude);
 
+  // Don't record positions that don't match a known location
+  if (locationName === 'unknown') return;
+
   // Only post if location name changed (mirrors Xamarin logic)
   if (locationName !== lastPostedLocation) {
     lastPostedLocation = locationName;
