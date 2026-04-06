@@ -86,7 +86,7 @@ function defaultTo(): Date {
 
 const DELETE_WIDTH = 80;
 
-function SwipeableCard({ onDelete, children }: { onDelete: () => void; children: React.ReactNode }) {
+function SwipeableCard({ onDelete, isDeleting, children }: { onDelete: () => void; isDeleting?: boolean; children: React.ReactNode }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const open       = useRef(false);
 
@@ -119,10 +119,16 @@ function SwipeableCard({ onDelete, children }: { onDelete: () => void; children:
   return (
     <View style={swipeStyles.container}>
       <View style={swipeStyles.deleteBtn}>
-        <TouchableOpacity style={swipeStyles.deleteBtnInner} onPress={handleDelete} activeOpacity={0.8}>
-          <Icon name="trash-can-outline" size={22} color="#fff" />
-          <Text style={swipeStyles.deleteBtnText}>Delete</Text>
-        </TouchableOpacity>
+        {isDeleting ? (
+          <View style={swipeStyles.deleteBtnInner}>
+            <ActivityIndicator color="#fff" />
+          </View>
+        ) : (
+          <TouchableOpacity style={swipeStyles.deleteBtnInner} onPress={handleDelete} activeOpacity={0.8}>
+            <Icon name="trash-can-outline" size={22} color="#fff" />
+            <Text style={swipeStyles.deleteBtnText}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
         {children}
@@ -217,10 +223,12 @@ export default function TimeScreen() {
 
   const totalSeconds = worklogs.reduce((s, w) => s + w.timeSpentSeconds, 0);
 
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const { mutate: deleteWorklog } = useMutation({
     mutationFn: (worklogId: number) => deleteTempoWorklog(currentUser!.id, worklogId),
     onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] }),
     onError:    (err: Error) => Alert.alert('Could not delete', err.message),
+    onSettled:  () => setDeletingId(null),
   });
 
   function confirmDelete(w: TempoWorklogEntry) {
@@ -229,7 +237,7 @@ export default function TimeScreen() {
       `Delete "${w.issueKey ?? '—'} ${w.comment ? '— ' + w.comment : ''}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteWorklog(w.id) },
+        { text: 'Delete', style: 'destructive', onPress: () => { setDeletingId(w.id); deleteWorklog(w.id); } },
       ],
     );
   }
@@ -440,7 +448,7 @@ export default function TimeScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
           {worklogs.map(w => (
-            <SwipeableCard key={w.id} onDelete={() => confirmDelete(w)}>
+            <SwipeableCard key={w.id} onDelete={() => confirmDelete(w)} isDeleting={deletingId === w.id}>
               <View style={styles.card}>
                 <View style={styles.cardLeft}>
                   <Text style={styles.cardKey}>{w.issueKey ?? '—'}</Text>
