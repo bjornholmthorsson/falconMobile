@@ -297,7 +297,7 @@ async function fetchAllEmployees(): Promise<Employee[]> {
     }
   }
 
-  const EXCLUDED_NAME_PATTERNS = /meeting room|phone booth|admin/i;
+  const EXCLUDED_NAME_PATTERNS = /meeting room|phone booth|admin|migration|service account|bot|test user|noreply/i;
   const activeUsers = [...userMap.values()].filter(
     ({ user }) => user.accountEnabled && !EXCLUDED_NAME_PATTERNS.test(user.displayName),
   );
