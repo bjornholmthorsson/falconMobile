@@ -1,15 +1,12 @@
 /**
- * Location service — wraps react-native-geolocation-service and the Falcon
+ * Location service — wraps @react-native-community/geolocation and the Falcon
  * backend, replicating the logic from LocationProvider.cs (Android) and
  * LocationManager.cs (iOS):
  *   - 50 m minimum displacement before posting
  *   - Matches position against KnownLocations (< 0.5 km) to get a place name
  *   - Falls back to "unknown"
  */
-import Geolocation, {
-  GeoPosition,
-  GeoWatchOptions,
-} from 'react-native-geolocation-service';
+import Geolocation, { GeoPosition } from '@react-native-community/geolocation';
 import { Platform, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -17,6 +14,8 @@ import {
   postLocation,
 } from './api';
 import type { KnownLocation } from '../models';
+
+export type { GeoPosition };
 
 const CACHE_KEY = '@falcon/knownLocations/v2';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
@@ -35,9 +34,13 @@ export async function requestLocationPermission(): Promise<boolean> {
     );
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   }
-  // iOS: handled via Info.plist + Geolocation.requestAuthorization
-  const auth = await Geolocation.requestAuthorization('always');
-  return auth === 'granted';
+  // iOS: request authorization via the native module
+  return new Promise(resolve => {
+    Geolocation.requestAuthorization(
+      () => resolve(true),
+      () => resolve(false),
+    );
+  });
 }
 
 // ── Watching ──────────────────────────────────────────────────────────────────
@@ -45,20 +48,15 @@ export async function requestLocationPermission(): Promise<boolean> {
 export function startWatching(userId: string): void {
   if (watchId !== null) return;
 
-  const options: GeoWatchOptions = {
-    accuracy: { android: 'high', ios: 'best' },
-    distanceFilter: MIN_DISPLACEMENT_M,
-    interval: 5 * 60 * 1000,       // 5 min Android
-    fastestInterval: 2 * 60 * 1000, // 2 min Android
-    showLocationDialog: true,
-    forceRequestLocation: false,
-    enableHighAccuracy: true,
-  };
-
   watchId = Geolocation.watchPosition(
     position => handlePositionUpdate(position, userId),
     error => console.warn('[LocationService] watch error', error),
-    options,
+    {
+      enableHighAccuracy: true,
+      distanceFilter: MIN_DISPLACEMENT_M,
+      interval: 5 * 60 * 1000,       // 5 min Android
+      fastestInterval: 2 * 60 * 1000, // 2 min Android
+    },
   );
 }
 
