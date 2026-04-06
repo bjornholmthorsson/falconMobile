@@ -535,7 +535,7 @@ export default function TimeScreen() {
             <View style={styles.submitRow}>
               <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, submittingWorklog && { opacity: 0.6 }]}
                 onPress={() => { saveAndNewRef.current = false; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
-                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save</Text>}
+                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save & Close</Text>}
               </TouchableOpacity>
               <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, { backgroundColor: '#1e7a6e' }, submittingWorklog && { opacity: 0.6 }]}
                 onPress={() => { saveAndNewRef.current = true; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
