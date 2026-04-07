@@ -219,37 +219,43 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
 
         {showNotifySection && (
           <View style={styles.notifySection}>
-            <Text style={styles.notifySectionTitle}>Notify me when arrives at</Text>
+            <View style={styles.notifyHeader}>
+              <Icon name="bell-ring-outline" size={16} color="#006559" />
+              <Text style={styles.notifySectionTitle}>Notify me when arrives at</Text>
+            </View>
             {subsLoading ? (
-              <ActivityIndicator style={{ marginVertical: 12 }} color="#006559" />
+              <ActivityIndicator style={{ marginVertical: 16 }} color="#006559" />
             ) : knownLocations && knownLocations.length > 0 ? (
-              knownLocations.map(loc => {
-                const sub = isSubscribed(loc.clientName);
-                const isActive = subscribeMutation.isPending && subscribeMutation.variables === loc.clientName;
-                const isRemoving = unsubscribeMutation.isPending && sub && unsubscribeMutation.variables === sub.id;
-                const loading = isActive || isRemoving;
-                return (
-                  <TouchableOpacity
-                    key={loc.id}
-                    style={[styles.notifyRow, sub && styles.notifyRowActive]}
-                    onPress={() => toggleSubscription(loc.clientName)}
-                    activeOpacity={0.7}
-                    disabled={loading}
-                  >
-                    <View style={styles.notifyRowLeft}>
-                      <Icon
-                        name={sub ? 'bell' : 'bell-outline'}
-                        size={20}
-                        color={sub ? '#006559' : '#888'}
-                      />
-                      <Text style={[styles.notifyLocationName, sub && styles.notifyLocationNameActive]}>
+              <View style={styles.notifyGrid}>
+                {knownLocations.map(loc => {
+                  const sub = isSubscribed(loc.clientName);
+                  const isActive = subscribeMutation.isPending && subscribeMutation.variables === loc.clientName;
+                  const isRemoving = unsubscribeMutation.isPending && sub && unsubscribeMutation.variables === sub.id;
+                  const loading = isActive || isRemoving;
+                  return (
+                    <TouchableOpacity
+                      key={loc.id}
+                      style={[styles.notifyChip, sub && styles.notifyChipActive]}
+                      onPress={() => toggleSubscription(loc.clientName)}
+                      activeOpacity={0.75}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator size="small" color={sub ? '#fff' : '#006559'} />
+                      ) : (
+                        <Icon
+                          name={sub ? 'bell-check' : 'bell-plus-outline'}
+                          size={15}
+                          color={sub ? '#fff' : '#006559'}
+                        />
+                      )}
+                      <Text style={[styles.notifyChipText, sub && styles.notifyChipTextActive]}>
                         {loc.clientName}
                       </Text>
-                    </View>
-                    {loading && <ActivityIndicator size="small" color="#006559" />}
-                  </TouchableOpacity>
-                );
-              })
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             ) : (
               <Text style={styles.notifyEmpty}>No known locations available</Text>
             )}
@@ -366,43 +372,51 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   notifySection: {
-    backgroundColor: '#fff',
     marginTop: 16,
     marginBottom: 32,
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
+  notifyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 14,
+  },
   notifySectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  notifyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  notifyRowActive: {
-    borderBottomColor: 'rgba(0,101,89,0.1)',
-  },
-  notifyRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  notifyLocationName: {
-    fontSize: 15,
-    color: '#555',
-  },
-  notifyLocationNameActive: {
+    fontSize: 12,
+    fontWeight: '700',
     color: '#006559',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  notifyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  notifyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#006559',
+    backgroundColor: '#fff',
+  },
+  notifyChipActive: {
+    backgroundColor: '#006559',
+    borderColor: '#006559',
+  },
+  notifyChipText: {
+    fontSize: 14,
+    color: '#006559',
+    fontWeight: '500',
+  },
+  notifyChipTextActive: {
+    color: '#fff',
     fontWeight: '600',
   },
   notifyEmpty: {
