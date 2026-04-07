@@ -49,8 +49,12 @@ function weatherIcon(code: number, isDay: boolean): string {
 async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo> {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`Weather API ${res.status}`);
   const json = await res.json();
   const cw = json.current_weather;
+  if (!cw || cw.temperature == null || cw.weathercode == null) {
+    throw new Error('Unexpected weather response');
+  }
   return {
     temp: Math.round(cw.temperature),
     icon: weatherIcon(cw.weathercode, cw.is_day === 1),
@@ -106,6 +110,7 @@ export default function HomeScreen() {
   const setTeamOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
   const checkinEnabled = useAppStore(s => s.checkinEnabled);
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
 
   function handleCityCardPress(office: string) {
     setTeamOfficeFilter([office]);
@@ -133,7 +138,12 @@ export default function HomeScreen() {
 
   async function handlePullRefresh() {
     setIsLunchRefreshing(true);
-    await Promise.all([refetch(), refetchMenu(), refetchOrders()]);
+    await Promise.all([
+      refetch(),
+      refetchMenu(),
+      refetchOrders(),
+      queryClient.invalidateQueries({ queryKey: ['weather'] }),
+    ]);
     setIsLunchRefreshing(false);
   }
 
@@ -229,6 +239,8 @@ function OfficeSummaryCard({ summary, onPress }: { summary: OfficeSummary; onPre
     queryKey: ['weather', summary.office],
     queryFn: () => fetchWeather(city.lat, city.lon),
     staleTime: 10 * 60 * 1000,
+    gcTime: 60 * 60 * 1000, // keep last good value for 1 hour even if refetch fails
+    retry: 2,
     enabled: !!city,
   });
 
