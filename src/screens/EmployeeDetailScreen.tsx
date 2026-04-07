@@ -2,7 +2,7 @@
  * EmployeeDetailScreen — modal/sheet with employee details, Teams presence,
  * call / SMS / Teams-chat actions.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,21 @@ import {
   Image,
   ScrollView,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUserPhoto } from '../services/graphService';
-import { getUserInformation } from '../services/api';
-import type { Employee, UserData } from '../models';
+import {
+  getUserInformation,
+  getUserSettings,
+  getKnownLocations,
+  getLocationSubscriptions,
+  createLocationSubscription,
+  deleteLocationSubscription,
+} from '../services/api';
+import { useAppStore } from '../store/appStore';
+import type { Employee, UserData, KnownLocation, LocationSubscription } from '../models';
 
 const SLACK_TEAM_ID = 'TD8GE7QFQ';
 
@@ -28,6 +37,9 @@ type Props = {
 };
 
 export default function EmployeeDetailScreen({ employee, visible, onClose }: Props) {
+  const currentUser = useAppStore(s => s.currentUser);
+  const queryClient = useQueryClient();
+
   const { data: photo } = useQuery({
     queryKey: ['photo', employee?.userId],
     queryFn: () => getUserPhoto(employee!.userId),
@@ -45,6 +57,42 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: targetSettings } = useQuery({
+    queryKey: ['userSettings', employee?.userId],
+    queryFn: () => getUserSettings(employee!.userId),
+    enabled: !!employee && visible,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: knownLocations } = useQuery<KnownLocation[]>({
+    queryKey: ['knownLocations'],
+    queryFn: () => getKnownLocations(),
+    enabled: !!employee && visible && !!targetSettings?.checkinEnabled,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: subscriptions, isLoading: subsLoading } = useQuery<LocationSubscription[]>({
+    queryKey: ['locationSubscriptions', currentUser?.id, employee?.userId],
+    queryFn: () => getLocationSubscriptions(currentUser!.id, employee!.userId),
+    enabled: !!currentUser && !!employee && visible && !!targetSettings?.checkinEnabled,
+    staleTime: 30 * 1000,
+  });
+
+  const subscribeMutation = useMutation({
+    mutationFn: (locationName: string) =>
+      createLocationSubscription(currentUser!.id, employee!.userId, locationName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['locationSubscriptions', currentUser?.id, employee?.userId] });
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: (id: number) => deleteLocationSubscription(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['locationSubscriptions', currentUser?.id, employee?.userId] });
+    },
+  });
+
   if (!employee) return null;
 
   function openPhone() {
@@ -58,6 +106,21 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
   function openTeams() {
     Linking.openURL(`msteams://l/chat/0/0?users=${employee!.userId}`);
   }
+
+  function isSubscribed(locationName: string): LocationSubscription | undefined {
+    return subscriptions?.find(s => s.locationName === locationName);
+  }
+
+  function toggleSubscription(locationName: string) {
+    const existing = isSubscribed(locationName);
+    if (existing) {
+      unsubscribeMutation.mutate(existing.id);
+    } else {
+      subscribeMutation.mutate(locationName);
+    }
+  }
+
+  const showNotifySection = targetSettings?.checkinEnabled && !!currentUser && currentUser.id !== employee.userId;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -153,6 +216,45 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
             </TouchableOpacity>
           )}
         </View>
+
+        {showNotifySection && (
+          <View style={styles.notifySection}>
+            <Text style={styles.notifySectionTitle}>Notify me when arrives at</Text>
+            {subsLoading ? (
+              <ActivityIndicator style={{ marginVertical: 12 }} color="#006559" />
+            ) : knownLocations && knownLocations.length > 0 ? (
+              knownLocations.map(loc => {
+                const sub = isSubscribed(loc.clientName);
+                const isActive = subscribeMutation.isPending && subscribeMutation.variables === loc.clientName;
+                const isRemoving = unsubscribeMutation.isPending && sub && unsubscribeMutation.variables === sub.id;
+                const loading = isActive || isRemoving;
+                return (
+                  <TouchableOpacity
+                    key={loc.id}
+                    style={[styles.notifyRow, sub && styles.notifyRowActive]}
+                    onPress={() => toggleSubscription(loc.clientName)}
+                    activeOpacity={0.7}
+                    disabled={loading}
+                  >
+                    <View style={styles.notifyRowLeft}>
+                      <Icon
+                        name={sub ? 'bell' : 'bell-outline'}
+                        size={20}
+                        color={sub ? '#006559' : '#888'}
+                      />
+                      <Text style={[styles.notifyLocationName, sub && styles.notifyLocationNameActive]}>
+                        {loc.clientName}
+                      </Text>
+                    </View>
+                    {loading && <ActivityIndicator size="small" color="#006559" />}
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <Text style={styles.notifyEmpty}>No known locations available</Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </Modal>
   );
@@ -262,5 +364,50 @@ const styles = StyleSheet.create({
     width: 56, height: 56, borderRadius: 12,
     backgroundColor: 'rgba(74,21,75,0.1)',
     alignItems: 'center', justifyContent: 'center',
+  },
+  notifySection: {
+    backgroundColor: '#fff',
+    marginTop: 16,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  notifySectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  notifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  notifyRowActive: {
+    borderBottomColor: 'rgba(0,101,89,0.1)',
+  },
+  notifyRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notifyLocationName: {
+    fontSize: 15,
+    color: '#555',
+  },
+  notifyLocationNameActive: {
+    color: '#006559',
+    fontWeight: '600',
+  },
+  notifyEmpty: {
+    fontSize: 14,
+    color: '#aaa',
+    paddingVertical: 12,
   },
 });

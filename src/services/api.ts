@@ -8,6 +8,7 @@ import type {
   HistoricalLocation,
   LunchWeek,
   UserSettings,
+  LocationSubscription,
 } from '../models';
 
 const BASE_URL = 'https://fd-falcon.azurewebsites.net';
@@ -401,4 +402,53 @@ export async function registerUserData(
     },
   );
   return res.ok;
+}
+
+// ── Device Tokens ─────────────────────────────────────────────────────────────
+
+export async function registerDeviceToken(
+  userId: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/device-tokens?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, token, platform: 'ios' }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+}
+
+// ── Location Subscriptions ────────────────────────────────────────────────────
+
+export async function getLocationSubscriptions(
+  subscriberId: string,
+  targetId: string,
+  signal?: AbortSignal,
+): Promise<LocationSubscription[]> {
+  return apiGet<LocationSubscription[]>(
+    `/api/location-subscriptions?subscriberId=${encodeURIComponent(subscriberId)}&targetId=${encodeURIComponent(targetId)}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function createLocationSubscription(
+  subscriberUserId: string,
+  targetUserId: string,
+  locationName: string,
+): Promise<{ id: number }> {
+  const res = await fetch(`${BASE_URL}/api/location-subscriptions?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscriberUserId, targetUserId, locationName }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<{ id: number }>;
+}
+
+export async function deleteLocationSubscription(id: number): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/location-subscriptions/${id}?code=${CODE}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) throw new Error(`API ${res.status}`);
 }

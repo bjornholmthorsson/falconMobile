@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
 import { getUserSettings } from '../services/api';
+import { setupPushNotifications } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
 
 /**
@@ -41,6 +42,7 @@ export function useLoadCurrentUser() {
     getMe()
       .then(user => {
         setCurrentUser(user);
+        setupPushNotifications(user.id).catch(() => {/* non-critical */});
         return getUserSettings(user.id);
       })
       .then(settings => setCheckinEnabled(settings.checkinEnabled))

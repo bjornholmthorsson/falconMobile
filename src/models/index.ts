@@ -161,3 +161,11 @@ export interface LunchWeek {
   dateLabel: string | null;
   days: LunchDay[];
 }
+
+export interface LocationSubscription {
+  id: number;
+  subscriberUserId: string;
+  targetUserId: string;
+  locationName: string;
+  createdAt: string;
+}

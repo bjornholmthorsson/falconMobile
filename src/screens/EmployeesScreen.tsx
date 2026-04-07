@@ -99,7 +99,7 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
               Connecting {totalCount} team members, synchronized in real-time with Teams.
             </Text>
             <View style={styles.searchWrapper}>
-              <Icon name="magnify" size={20} color="#9ca3af" style={styles.searchIcon} />
+              <Icon name="magnify" size={20} color="#9ca3af" style={{ marginRight: 8 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search by name, role, or skill..."
