@@ -106,8 +106,12 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
                 placeholderTextColor="#9ca3af"
                 value={search}
                 onChangeText={setSearch}
-                clearButtonMode="while-editing"
               />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Icon name="close-circle" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              )}
             </View>
             {/* Office filter chips */}
             <View style={styles.filterRow}>
