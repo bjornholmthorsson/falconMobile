@@ -3,7 +3,6 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import UserNotifications
-import RNCPushNotificationIOS
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate, RNAppAuthAuthorizationFlowManager, UNUserNotificationCenterDelegate {
@@ -73,7 +72,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, RNAppAuthAuthorizationFlo
   func userNotificationCenter(_ center: UNUserNotificationCenter,
                                didReceive response: UNNotificationResponse,
                                withCompletionHandler completionHandler: @escaping () -> Void) {
-    RNCPushNotificationIOS.didReceiveNotificationResponse(response)
+    RNCPushNotificationIOS.didReceive(response)
     completionHandler()
   }
 }
