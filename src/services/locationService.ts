@@ -17,7 +17,7 @@ import type { KnownLocation } from '../models';
 
 export type { GeoPosition };
 
-const CACHE_KEY = '@falcon/knownLocations/v2';
+const CACHE_KEY = '@falcon/knownLocations/v3';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 const MIN_DISPLACEMENT_M = 50;
 const KNOWN_LOCATION_RADIUS_KM = 0.5;
@@ -34,7 +34,12 @@ export async function requestLocationPermission(): Promise<boolean> {
     );
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   }
-  // iOS: request authorization via the native module
+  // iOS: configure for "always" authorization BEFORE requesting — required by
+  // @react-native-community/geolocation for background location updates.
+  Geolocation.setRNConfiguration({
+    authorizationLevel: 'always',
+    skipPermissionRequests: false,
+  });
   return new Promise(resolve => {
     Geolocation.requestAuthorization(
       () => resolve(true),
