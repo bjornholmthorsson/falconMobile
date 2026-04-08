@@ -13,7 +13,9 @@ export async function setupPushNotifications(userId: string): Promise<void> {
 
   let PushNotificationIOS: any;
   try {
-    PushNotificationIOS = require('@react-native-community/push-notification-ios').default;
+    const mod = require('@react-native-community/push-notification-ios');
+    PushNotificationIOS = mod.default || mod;
+    if (!PushNotificationIOS?.requestPermissions) return;
   } catch {
     return; // native module unavailable (e.g. simulator)
   }
@@ -50,7 +52,9 @@ export function teardownPushNotifications(): void {
   if (Platform.OS !== 'ios') return;
   let PushNotificationIOS: any;
   try {
-    PushNotificationIOS = require('@react-native-community/push-notification-ios').default;
+    const mod = require('@react-native-community/push-notification-ios');
+    PushNotificationIOS = mod.default || mod;
+    if (!PushNotificationIOS?.removeEventListener) return;
   } catch {
     return;
   }

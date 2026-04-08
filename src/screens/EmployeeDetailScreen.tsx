@@ -78,18 +78,43 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
     staleTime: 30 * 1000,
   });
 
+  const subsQueryKey = ['locationSubscriptions', currentUser?.id, employee?.userId];
+
   const subscribeMutation = useMutation({
     mutationFn: (locationName: string) =>
       createLocationSubscription(currentUser!.id, employee!.userId, locationName),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locationSubscriptions', currentUser?.id, employee?.userId] });
+    onMutate: async (locationName: string) => {
+      await queryClient.cancelQueries({ queryKey: subsQueryKey });
+      const previous = queryClient.getQueryData<LocationSubscription[]>(subsQueryKey);
+      queryClient.setQueryData<LocationSubscription[]>(subsQueryKey, old => [
+        ...(old ?? []),
+        { id: -Date.now(), subscriberUserId: currentUser!.id, targetUserId: employee!.userId, locationName, createdAt: new Date().toISOString() },
+      ]);
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(subsQueryKey, context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: subsQueryKey });
     },
   });
 
   const unsubscribeMutation = useMutation({
     mutationFn: (id: number) => deleteLocationSubscription(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locationSubscriptions', currentUser?.id, employee?.userId] });
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: subsQueryKey });
+      const previous = queryClient.getQueryData<LocationSubscription[]>(subsQueryKey);
+      queryClient.setQueryData<LocationSubscription[]>(subsQueryKey, old =>
+        (old ?? []).filter(s => s.id !== id),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(subsQueryKey, context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: subsQueryKey });
     },
   });
 
