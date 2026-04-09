@@ -435,11 +435,12 @@ export async function createLocationSubscription(
   subscriberUserId: string,
   targetUserId: string,
   locationName: string,
+  subscriberDisplayName?: string,
 ): Promise<{ id: number }> {
   const res = await fetch(`${BASE_URL}/api/location-subscriptions?code=${CODE}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscriberUserId, targetUserId, locationName }),
+    body: JSON.stringify({ subscriberUserId, targetUserId, locationName, subscriberDisplayName }),
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json() as Promise<{ id: number }>;

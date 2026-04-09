@@ -82,7 +82,7 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
 
   const subscribeMutation = useMutation({
     mutationFn: (locationName: string) =>
-      createLocationSubscription(currentUser!.id, employee!.userId, locationName),
+      createLocationSubscription(currentUser!.id, employee!.userId, locationName, currentUser!.displayName),
     onMutate: async (locationName: string) => {
       await queryClient.cancelQueries({ queryKey: subsQueryKey });
       const previous = queryClient.getQueryData<LocationSubscription[]>(subsQueryKey);

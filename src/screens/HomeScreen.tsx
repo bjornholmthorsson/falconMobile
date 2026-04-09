@@ -20,7 +20,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/graphService';
 import { getUserAbsences, getLunchMenu, getLunchOrders } from '../services/api';
 import { signOut } from '../services/authService';
-import { useAppStore } from '../store/appStore';
+import { useAppStore, type InAppNotification } from '../store/appStore';
+import { decrementBadge } from '../services/notificationService';
 import type { OfficeSummary, LunchWeek } from '../models';
 
 const CARD_SIZE = (Dimensions.get('window').width - 48) / 2;
@@ -109,6 +110,8 @@ export default function HomeScreen() {
   const currentUser = useAppStore(s => s.currentUser);
   const setTeamOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
   const checkinEnabled = useAppStore(s => s.checkinEnabled);
+  const notifications = useAppStore(s => s.notifications);
+  const dismissNotification = useAppStore(s => s.dismissNotification);
   const navigation = useNavigation<any>();
   const queryClient = useQueryClient();
 
@@ -206,6 +209,17 @@ export default function HomeScreen() {
         />
       }
     >
+      {notifications.length > 0 && (
+        <View style={styles.notifList}>
+          {notifications.map(n => (
+            <NotificationBanner
+              key={n.id}
+              notification={n}
+              onDismiss={() => { dismissNotification(n.id); decrementBadge(); }}
+            />
+          ))}
+        </View>
+      )}
       <View style={styles.headerRow}>
         {isRefetching && <ActivityIndicator size="small" color="#1e1b14" />}
         {!checkinEnabled && (
@@ -353,6 +367,21 @@ function LunchWeekCard({
   );
 }
 
+function NotificationBanner({ notification, onDismiss }: { notification: InAppNotification; onDismiss: () => void }) {
+  return (
+    <View style={styles.notifBanner}>
+      <Icon name="bell-ring" size={20} color="#006559" style={styles.notifIcon} />
+      <View style={styles.notifContent}>
+        {!!notification.title && <Text style={styles.notifTitle}>{notification.title}</Text>}
+        {!!notification.body && <Text style={styles.notifBody}>{notification.body}</Text>}
+      </View>
+      <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Icon name="close-circle" size={20} color="#9ca3af" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 async function fetchAllOfficeSummaries(): Promise<OfficeSummary[]> {
   return Promise.race([doFetch(), hardTimeout(12_000)]);
 }
@@ -489,4 +518,25 @@ const styles = StyleSheet.create({
   lunchEmptyTile: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb', borderStyle: 'dashed' },
   lunchFoodLabel: { fontSize: 9, color: '#374151', fontWeight: '600', textAlign: 'center', maxWidth: 52 },
   lunchEmptyLabel: { fontSize: 11, color: '#d1d5db', fontWeight: '500' },
+
+  // Notification banners
+  notifList: { gap: 8, marginBottom: 12 },
+  notifBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#006559',
+  },
+  notifIcon: { marginRight: 10 },
+  notifContent: { flex: 1, marginRight: 8 },
+  notifTitle: { fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 },
+  notifBody: { fontSize: 13, color: '#555' },
 });

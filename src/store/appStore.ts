@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { User } from '../models';
 
+export interface InAppNotification {
+  id: string;
+  title: string;
+  body: string;
+  receivedAt: number;
+}
+
 interface AppState {
   currentUser: User | null;
   isAuthenticated: boolean;
@@ -8,6 +15,7 @@ interface AppState {
   isWorking: boolean;
   teamOfficeFilter: string[];
   checkinEnabled: boolean;
+  notifications: InAppNotification[];
 
   setCurrentUser: (user: User | null) => void;
   setIsAuthenticated: (auth: boolean) => void;
@@ -15,6 +23,8 @@ interface AppState {
   setIsWorking: (working: boolean) => void;
   setTeamOfficeFilter: (offices: string[]) => void;
   setCheckinEnabled: (enabled: boolean) => void;
+  addNotification: (n: InAppNotification) => void;
+  dismissNotification: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>(set => ({
@@ -24,6 +34,7 @@ export const useAppStore = create<AppState>(set => ({
   isWorking: false,
   teamOfficeFilter: [],
   checkinEnabled: false, // stays false until user settings are loaded from backend
+  notifications: [],
 
   setCurrentUser: user => set({ currentUser: user }),
   setIsAuthenticated: auth => set({ isAuthenticated: auth }),
@@ -31,4 +42,6 @@ export const useAppStore = create<AppState>(set => ({
   setIsWorking: working => set({ isWorking: working }),
   setTeamOfficeFilter: offices => set({ teamOfficeFilter: offices }),
   setCheckinEnabled: enabled => set({ checkinEnabled: enabled }),
+  addNotification: n => set(s => ({ notifications: [n, ...s.notifications] })),
+  dismissNotification: id => set(s => ({ notifications: s.notifications.filter(n => n.id !== id) })),
 }));
