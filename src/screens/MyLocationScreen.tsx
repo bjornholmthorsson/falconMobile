@@ -2,7 +2,7 @@
  * MyLocationScreen — shows the user's location history for a chosen date,
  * a map with known location markers, and lets them set/remove a known location.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -38,6 +38,7 @@ export default function MyLocationScreen() {
   const [loadingAdd, setLoadingAdd]     = useState(false);
   const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
   const [pinnedCoordinate, setPinnedCoordinate] = useState<{ latitude: number; longitude: number } | null>(null);
+  const mapRef = useRef<MapView>(null);
   const qc = useQueryClient();
 
   // Refetch known locations every time screen comes into focus
@@ -45,21 +46,22 @@ export default function MyLocationScreen() {
     qc.invalidateQueries({ queryKey: ['knownUserLocations', currentUser?.id] });
   }, [currentUser?.id, qc]));
 
-  // Centre map on user's current GPS position on mount — only when check-in is enabled
-  useEffect(() => {
-    if (!checkinEnabled) return;
+  // Centre map on user's current GPS position when screen is focused
+  useFocusEffect(useCallback(() => {
     requestLocationPermission().then(granted => {
       if (!granted) return;
       getCurrentPosition().then(pos => {
-        setCurrentRegion({
+        const region = {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+        setCurrentRegion(region);
+        mapRef.current?.animateToRegion(region, 600);
       }).catch(() => {});
     });
-  }, [checkinEnabled]);
+  }, []));
 
   const dateLabel = selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -214,9 +216,9 @@ export default function MyLocationScreen() {
 
       {/* Map */}
       <MapView
+        ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
-        region={currentRegion ?? initialRegion}
         showsUserLocation
         showsMyLocationButton
         onLongPress={e => setPinnedCoordinate(e.nativeEvent.coordinate)}

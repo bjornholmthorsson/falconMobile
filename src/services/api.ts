@@ -446,6 +446,74 @@ export async function createLocationSubscription(
   return res.json() as Promise<{ id: number }>;
 }
 
+// ── Travel Request ───────────────────────────────────────────────────────────
+
+export interface TravelRequestPayload {
+  summary: string;
+  description?: string;
+  destination?: string;
+  departureDate?: string;
+  returnDate?: string;
+  departurePreference?: string;
+  returnPreference?: string;
+  passengers?: string;
+  flightInformation?: string;
+  hotelNeeded?: string;
+  billable?: string;
+  costCenter?: string;
+  customer?: string;
+  account?: string;
+  accountKey?: string;
+}
+
+export interface JiraUser {
+  name: string;
+  displayName: string;
+}
+
+export async function searchJiraUsers(
+  query: string,
+  signal?: AbortSignal,
+): Promise<JiraUser[]> {
+  return apiGet<JiraUser[]>(
+    `/api/jira/users?query=${encodeURIComponent(query)}&code=${CODE}`,
+    signal,
+  );
+}
+
+export interface TempoAccount {
+  id: number;
+  key: string;
+  name: string;
+}
+
+export async function searchTempoAccounts(
+  query: string,
+  signal?: AbortSignal,
+): Promise<TempoAccount[]> {
+  return apiGet<TempoAccount[]>(
+    `/api/tempo/accounts?query=${encodeURIComponent(query)}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function createTravelRequest(
+  payload: TravelRequestPayload,
+  signal?: AbortSignal,
+): Promise<{ key: string; id: string; self: string }> {
+  const res = await fetch(`${BASE_URL}/api/travel-request?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+  return res.json() as Promise<{ key: string; id: string; self: string }>;
+}
+
 export async function deleteLocationSubscription(id: number): Promise<void> {
   const res = await fetch(
     `${BASE_URL}/api/location-subscriptions/${id}?code=${CODE}`,

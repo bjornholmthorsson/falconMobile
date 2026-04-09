@@ -119,7 +119,7 @@ function TimeField({ label, value, onChange }: {
                 mode="time"
                 display="spinner"
                 locale="en_GB"
-                onChange={(_e, d) => d && setTemp(d)}
+                onValueChange={(_e, d) => setTemp(d)}
                 themeVariant="light"
               />
             </View>
@@ -131,7 +131,8 @@ function TimeField({ label, value, onChange }: {
           value={temp}
           mode="time"
           display="default"
-          onChange={(_e, d) => { setOpen(false); if (d) onChange(d); }}
+          onValueChange={(_e, d) => { setOpen(false); onChange(d); }}
+          onDismiss={() => setOpen(false)}
         />
       )}
     </View>

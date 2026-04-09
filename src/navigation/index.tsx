@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, ActivityIndicator } from 'react-native';
 import { useAppStore } from '../store/appStore';
-import { HomeIcon, EmployeesIcon, LocationIcon, ProfileIcon, LunchIcon, TimeIcon } from '../components/TabIcons';
+import { HomeIcon, EmployeesIcon, LocationIcon, ProfileIcon, LunchIcon, TimeIcon, OtherIcon } from '../components/TabIcons';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -13,6 +13,7 @@ import EmployeeDetailScreen from '../screens/EmployeeDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LunchScreen from '../screens/LunchScreen';
 import TimeScreen from '../screens/TimeScreen';
+import OtherScreen from '../screens/OtherScreen';
 import MyLocationScreen from '../screens/MyLocationScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
@@ -44,6 +45,7 @@ function MainTabs() {
           if (route.name === 'Pulse') return <LocationIcon color={color} size={size} />;
           if (route.name === 'Lunch') return <LunchIcon color={color} size={size} />;
           if (route.name === 'Time') return <TimeIcon color={color} size={size} />;
+          if (route.name === 'Other') return <OtherIcon color={color} size={size} />;
           if (route.name === 'Profile') return <ProfileIcon color={color} size={size} />;
           return null;
         },
@@ -60,6 +62,7 @@ function MainTabs() {
       <Tab.Screen name="Pulse" component={MyLocationScreen} />
       <Tab.Screen name="Lunch" component={LunchScreen} />
       <Tab.Screen name="Time" component={TimeScreen} />
+      <Tab.Screen name="Other" component={OtherScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
