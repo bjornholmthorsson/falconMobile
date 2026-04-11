@@ -42,10 +42,11 @@ export interface UserLocation {
 
 export interface KnownLocation {
   id: string;
-  clientName: string;
+  placeName: string;
   location: {
     coordinates: [number, number]; // [lat, lon]
   };
+  isPublic?: boolean;
   distance?: number;
 }
 

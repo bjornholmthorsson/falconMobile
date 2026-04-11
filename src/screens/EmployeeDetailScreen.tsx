@@ -253,15 +253,15 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
             ) : knownLocations && knownLocations.length > 0 ? (
               <View style={styles.notifyGrid}>
                 {knownLocations.map(loc => {
-                  const sub = isSubscribed(loc.clientName);
-                  const isActive = subscribeMutation.isPending && subscribeMutation.variables === loc.clientName;
+                  const sub = isSubscribed(loc.placeName);
+                  const isActive = subscribeMutation.isPending && subscribeMutation.variables === loc.placeName;
                   const isRemoving = unsubscribeMutation.isPending && sub && unsubscribeMutation.variables === sub.id;
                   const loading = isActive || isRemoving;
                   return (
                     <TouchableOpacity
                       key={loc.id}
                       style={[styles.notifyChip, sub && styles.notifyChipActive]}
-                      onPress={() => toggleSubscription(loc.clientName)}
+                      onPress={() => toggleSubscription(loc.placeName)}
                       activeOpacity={0.75}
                       disabled={loading}
                     >
@@ -275,7 +275,7 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
                         />
                       )}
                       <Text style={[styles.notifyChipText, sub && styles.notifyChipTextActive]}>
-                        {loc.clientName}
+                        {loc.placeName}
                       </Text>
                     </TouchableOpacity>
                   );

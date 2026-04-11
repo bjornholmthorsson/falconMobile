@@ -107,7 +107,7 @@ export async function resolveLocationName(
     .filter(loc => loc.distance < KNOWN_LOCATION_RADIUS_KM)
     .sort((a, b) => a.distance - b.distance);
 
-  return withDistance[0]?.clientName ?? 'unknown';
+  return withDistance[0]?.placeName ?? 'unknown';
 }
 
 // ── Internals ─────────────────────────────────────────────────────────────────

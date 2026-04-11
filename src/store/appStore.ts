@@ -15,8 +15,10 @@ interface AppState {
   isWorking: boolean;
   teamOfficeFilter: string[];
   checkinEnabled: boolean;
+  userTokens: string[];
   notifications: InAppNotification[];
 
+  setUserTokens: (tokens: string[]) => void;
   setCurrentUser: (user: User | null) => void;
   setIsAuthenticated: (auth: boolean) => void;
   setAuthRestored: (restored: boolean) => void;
@@ -34,8 +36,10 @@ export const useAppStore = create<AppState>(set => ({
   isWorking: false,
   teamOfficeFilter: [],
   checkinEnabled: false, // stays false until user settings are loaded from backend
+  userTokens: [],
   notifications: [],
 
+  setUserTokens: tokens => set({ userTokens: tokens }),
   setCurrentUser: user => set({ currentUser: user }),
   setIsAuthenticated: auth => set({ isAuthenticated: auth }),
   setAuthRestored: restored => set({ authRestored: restored }),

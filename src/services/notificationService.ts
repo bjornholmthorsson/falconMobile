@@ -60,6 +60,19 @@ export async function setupPushNotifications(userId: string): Promise<void> {
   });
 }
 
+/** Clear the app badge (called when app comes to foreground). */
+export function clearBadge(): void {
+  if (Platform.OS !== 'ios') return;
+  try {
+    const mod = require('@react-native-community/push-notification-ios');
+    const PushNotificationIOS = mod.default || mod;
+    if (!PushNotificationIOS?.setApplicationIconBadgeNumber) return;
+    PushNotificationIOS.setApplicationIconBadgeNumber(0);
+  } catch {
+    // ignore
+  }
+}
+
 /** Decrease the app badge by 1 (called when user dismisses an in-app notification). */
 export function decrementBadge(): void {
   if (Platform.OS !== 'ios') return;

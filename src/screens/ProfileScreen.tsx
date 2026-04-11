@@ -21,6 +21,7 @@ import {
   getWorklogKeywordRules, addWorklogKeywordRule, deleteWorklogKeywordRule,
   type WorklogKeywordRule,
 } from '../services/api';
+import AdminTokenScreen from './AdminTokenScreen';
 import { signOut, signInSecondAccount, signOutSecondAccount, getSecondAccountEmail } from '../services/authService';
 import { useAppStore } from '../store/appStore';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -32,16 +33,18 @@ export default function ProfileScreen() {
   const setIsAuthenticated = useAppStore(s => s.setIsAuthenticated);
   const checkinEnabled     = useAppStore(s => s.checkinEnabled);
   const setCheckinEnabled  = useAppStore(s => s.setCheckinEnabled);
+  const userTokens         = useAppStore(s => s.userTokens);
+  const [adminOpen, setAdminOpen] = useState(false);
   const qc = useQueryClient();
 
-  const { data: photo } = useQuery({
+  const { data: photo, isFetching: photoFetching } = useQuery({
     queryKey: ['photo', currentUser?.userPrincipalName],
     queryFn: () => getUserPhoto(currentUser!.userPrincipalName),
     enabled: !!currentUser,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: userData } = useQuery({
+  const { data: userData, isFetching: userDataFetching } = useQuery({
     queryKey: ['userData', currentUser?.id],
     queryFn: () => getUserData([currentUser!.id]),
     enabled: !!currentUser,
@@ -77,7 +80,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
 
   // ── Keyword rules ────────────────────────────────────────────────────────
-  const { data: keywordRules = [] } = useQuery<WorklogKeywordRule[]>({
+  const { data: keywordRules = [], isFetching: rulesFetching } = useQuery<WorklogKeywordRule[]>({
     queryKey: ['keywordRules', currentUser?.id],
     queryFn:  () => getWorklogKeywordRules(currentUser!.id),
     enabled:  !!currentUser,
@@ -200,12 +203,22 @@ export default function ProfileScreen() {
     ]);
   }
 
+  const profileLoading = photoFetching || userDataFetching || rulesFetching;
+
   const teamsHandle = currentUser?.userPrincipalName
     ? '@' + currentUser.userPrincipalName.split('@')[0]
     : null;
 
   const phone = currentUser?.mobilePhone ?? currentUser?.businessPhone ?? null;
   const ud = userData?.[0];
+
+  if (profileLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#006559" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -397,6 +410,27 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Administration (Admin token holders only) ── */}
+      {userTokens.includes('Admin') && (
+        <>
+          <Text style={styles.sectionHeader}>Administration</Text>
+          <View style={styles.settingsCard}>
+            <TouchableOpacity style={styles.settingsRow} onPress={() => setAdminOpen(true)} activeOpacity={0.7}>
+              <View style={styles.settingsRowLeft}>
+                <View style={[styles.settingsIcon, { backgroundColor: '#fef3c7' }]}>
+                  <Icon name="shield-account" size={20} color="#b45309" />
+                </View>
+                <View>
+                  <Text style={styles.settingsRowTitle}>Manage User Tokens</Text>
+                  <Text style={styles.settingsRowSub}>Grant or revoke access tokens</Text>
+                </View>
+              </View>
+              <Icon name="chevron-right" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
       {/* ── App Info ── */}
       <Text style={styles.sectionHeader}>App Info</Text>
       <View style={styles.appInfoCard}>
@@ -542,12 +576,14 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      <AdminTokenScreen visible={adminOpen} onClose={() => setAdminOpen(false)} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#C7D3D3' },
+  loadingContainer: { flex: 1, backgroundColor: '#C7D3D3', alignItems: 'center', justifyContent: 'center' },
   scroll:    { padding: 16, paddingBottom: 48 },
 
   // Profile card

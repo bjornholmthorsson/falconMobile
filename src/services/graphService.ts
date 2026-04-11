@@ -305,6 +305,21 @@ export async function sendAbsenceNotification(
   );
 }
 
+// ── User search ──────────────────────────────────────────────────────────────
+
+export async function searchGraphUsers(
+  query: string,
+  signal?: AbortSignal,
+): Promise<User[]> {
+  if (!query.trim()) return [];
+  const filter = encodeURIComponent(`startswith(displayName,'${query.replace(/'/g, "''")}') or startswith(userPrincipalName,'${query.replace(/'/g, "''")}')`);
+  const data = await graphGet<{ value: any[] }>(
+    `/users?$filter=${filter}&$select=${GRAPH_USER_FIELDS}&$top=10`,
+    signal,
+  );
+  return (data.value ?? []).map(mapUser);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function mapUser(d: any): User {

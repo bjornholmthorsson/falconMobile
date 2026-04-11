@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
-import { getUserSettings } from '../services/api';
-import { setupPushNotifications } from '../services/notificationService';
+import { getUserSettings, getUserTokens } from '../services/api';
+import { setupPushNotifications, clearBadge } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
 
 /**
@@ -16,6 +17,7 @@ export function useLoadCurrentUser() {
   const setCurrentUser = useAppStore(s => s.setCurrentUser);
   const setAuthRestored = useAppStore(s => s.setAuthRestored);
   const setCheckinEnabled = useAppStore(s => s.setCheckinEnabled);
+  const setUserTokens = useAppStore(s => s.setUserTokens);
 
   // Restore auth state once on cold start
   const restoredRef = useRef(false);
@@ -34,6 +36,15 @@ export function useLoadCurrentUser() {
     }
   }, []);
 
+  // Clear badge when app comes to foreground
+  useEffect(() => {
+    clearBadge();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') clearBadge();
+    });
+    return () => sub.remove();
+  }, []);
+
   // Load user profile once when authenticated and not yet loaded
   const fetchedRef = useRef(false);
   useEffect(() => {
@@ -43,6 +54,9 @@ export function useLoadCurrentUser() {
       .then(user => {
         setCurrentUser(user);
         setupPushNotifications(user.id).catch(() => {/* non-critical */});
+        getUserTokens(user.id)
+          .then(tokens => setUserTokens(tokens.map(t => t.tokenName)))
+          .catch(() => {/* tokens unavailable — no special access */});
         return getUserSettings(user.id);
       })
       .then(settings => setCheckinEnabled(settings.checkinEnabled))

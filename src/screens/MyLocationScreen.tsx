@@ -32,7 +32,9 @@ import type { HistoricalLocation, KnownLocation } from '../models';
 
 export default function MyLocationScreen() {
   const currentUser    = useAppStore(s => s.currentUser);
+  const userTokens     = useAppStore(s => s.userTokens);
   const checkinEnabled = useAppStore(s => s.checkinEnabled);
+  const isLocationAdmin = userTokens.includes('KnownLocationAdmin');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loadingKnown, setLoadingKnown] = useState(false);
   const [loadingAdd, setLoadingAdd]     = useState(false);
@@ -98,7 +100,7 @@ export default function MyLocationScreen() {
     const map = new Map<string, { latitude: number; longitude: number }>();
     for (const loc of allKnownLocations) {
       if (loc.location?.coordinates) {
-        map.set(loc.clientName, {
+        map.set(loc.placeName, {
           latitude: loc.location.coordinates[0],
           longitude: loc.location.coordinates[1],
         });
@@ -123,7 +125,7 @@ export default function MyLocationScreen() {
 
   // The logged-in user's own Home entry (client_name = 'Home', user_id = current user)
   const homeLocation = useMemo(
-    () => knownUserLocations.find(l => l.clientName === 'Home' && l.id === currentUser?.id),
+    () => knownUserLocations.find(l => l.placeName === 'Home' && l.id === currentUser?.id),
     [knownUserLocations, currentUser?.id],
   );
 
@@ -188,27 +190,45 @@ export default function MyLocationScreen() {
     ]);
   }
 
+  async function saveKnownLocation(name: string, isPublic?: boolean) {
+    if (!currentUser || !pinnedCoordinate) return;
+    setLoadingAdd(true);
+    try {
+      await addKnownLocation(currentUser.id, name, pinnedCoordinate.longitude, pinnedCoordinate.latitude, isPublic);
+      qc.invalidateQueries({ queryKey: ['knownUserLocations'] });
+      qc.invalidateQueries({ queryKey: ['knownLocations'] });
+      setPinnedCoordinate(null);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to add location');
+    } finally {
+      setLoadingAdd(false);
+    }
+  }
+
   async function handleAddKnownLocation() {
     if (!currentUser || !pinnedCoordinate) return;
-    Alert.prompt(
-      'Set known location',
-      'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
-      async (name) => {
-        if (!name?.trim()) return;
-        setLoadingAdd(true);
-        try {
-          await addKnownLocation(currentUser.id, name.trim(), pinnedCoordinate.longitude, pinnedCoordinate.latitude);
-          qc.invalidateQueries({ queryKey: ['knownUserLocations'] });
-          setPinnedCoordinate(null);
-          Alert.alert('Saved', `"${name.trim()}" has been added as a known location.`);
-        } catch (err: any) {
-          Alert.alert('Error', err?.message ?? 'Failed to add location');
-        } finally {
-          setLoadingAdd(false);
-        }
-      },
-      'plain-text',
-    );
+    if (isLocationAdmin) {
+      Alert.prompt(
+        'Set known location',
+        'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Private', onPress: (name) => { if (name?.trim()) saveKnownLocation(name.trim(), false); } },
+          { text: 'Public', onPress: (name) => { if (name?.trim()) saveKnownLocation(name.trim(), true); } },
+        ],
+        'plain-text',
+      );
+    } else {
+      Alert.prompt(
+        'Set known location',
+        'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
+        async (name) => {
+          if (!name?.trim()) return;
+          await saveKnownLocation(name.trim());
+        },
+        'plain-text',
+      );
+    }
   }
 
   return (
@@ -227,16 +247,16 @@ export default function MyLocationScreen() {
         {knownUserLocations.map(loc =>
           loc.location?.coordinates ? (
             <Marker
-              key={`known-${loc.id}-${loc.clientName}`}
+              key={`known-${loc.id}-${loc.placeName}`}
               coordinate={{
                 latitude: loc.location.coordinates[0],
                 longitude: loc.location.coordinates[1],
               }}
-              pinColor={loc.clientName === 'Home' ? '#006559' : '#f97316'}
+              pinColor={loc.placeName === 'Home' ? '#006559' : '#f97316'}
             >
               <Callout tooltip>
                 <View style={styles.callout}>
-                  <Text style={styles.calloutText}>{loc.clientName}</Text>
+                  <Text style={styles.calloutText}>{loc.placeName}</Text>
                 </View>
               </Callout>
             </Marker>
@@ -261,7 +281,7 @@ export default function MyLocationScreen() {
       <ScrollView style={styles.controls} contentContainerStyle={styles.controlsContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Home location</Text>
-          <Text style={styles.cardValue}>{homeLocation?.clientName ?? '—'}</Text>
+          <Text style={styles.cardValue}>{homeLocation?.placeName ?? '—'}</Text>
           <View style={styles.cardActions}>
             {loadingKnown ? (
               <ActivityIndicator size="small" color="#006559" />

@@ -89,6 +89,7 @@ export async function addKnownLocation(
   name: string,
   longitude: number,
   latitude: number,
+  isPublic?: boolean,
   signal?: AbortSignal,
 ): Promise<boolean> {
   const res = await fetch(
@@ -96,7 +97,7 @@ export async function addKnownLocation(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Name: name, Longitude: longitude, Latitude: latitude }),
+      body: JSON.stringify({ Name: name, Longitude: longitude, Latitude: latitude, IsPublic: isPublic }),
       signal,
     },
   );
@@ -184,6 +185,30 @@ export async function submitLunchOrders(
     signal,
   });
   return res.ok;
+}
+
+export interface LunchOrderSummaryDay {
+  dayOfWeek: string;
+  date: string;
+  orders: { userId: string; displayName: string; category: string }[];
+}
+
+export interface LunchOrdersSummary {
+  year: number;
+  week: number;
+  totalOrders: number;
+  days: LunchOrderSummaryDay[];
+}
+
+export async function getLunchOrdersSummary(
+  year: number,
+  week: number,
+  signal?: AbortSignal,
+): Promise<LunchOrdersSummary> {
+  return apiGet<LunchOrdersSummary>(
+    `/api/lunch-orders-summary?year=${year}&week=${week}&code=${CODE}`,
+    signal,
+  );
 }
 
 // ── Absences ────────────────────────────────────────────────────────────────
@@ -518,6 +543,47 @@ export async function deleteLocationSubscription(id: number): Promise<void> {
   const res = await fetch(
     `${BASE_URL}/api/location-subscriptions/${id}?code=${CODE}`,
     { method: 'DELETE' },
+  );
+  if (!res.ok) throw new Error(`API ${res.status}`);
+}
+
+// ── User Tokens (authorization) ──────────────────────────────────────────────
+
+export interface UserToken {
+  id: number;
+  tokenName: string;
+  grantedBy: string;
+  createdAt: string;
+}
+
+export async function getUserTokens(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<UserToken[]> {
+  return apiGet<UserToken[]>(`/api/user/${userId}/tokens?code=${CODE}`, signal);
+}
+
+export async function grantUserToken(
+  userId: string,
+  tokenName: string,
+  grantedBy: string,
+  signal?: AbortSignal,
+): Promise<UserToken> {
+  return apiPost<UserToken>(
+    `/api/user/${userId}/tokens?code=${CODE}`,
+    { tokenName, grantedBy },
+    signal,
+  );
+}
+
+export async function revokeUserToken(
+  userId: string,
+  tokenId: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/${userId}/tokens/${tokenId}?code=${CODE}`,
+    { method: 'DELETE', signal },
   );
   if (!res.ok) throw new Error(`API ${res.status}`);
 }
