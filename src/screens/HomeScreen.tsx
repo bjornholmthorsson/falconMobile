@@ -21,7 +21,7 @@ import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/grap
 import { getUserAbsences, getLunchMenu, getLunchOrders } from '../services/api';
 import { signOut } from '../services/authService';
 import { useAppStore, type InAppNotification } from '../store/appStore';
-import { decrementBadge } from '../services/notificationService';
+import { decrementBadge, removeDeliveredNotification } from '../services/notificationService';
 import type { OfficeSummary, LunchWeek } from '../models';
 
 const CARD_SIZE = (Dimensions.get('window').width - 48) / 2;
@@ -215,7 +215,7 @@ export default function HomeScreen() {
             <NotificationBanner
               key={n.id}
               notification={n}
-              onDismiss={() => { dismissNotification(n.id); decrementBadge(); }}
+              onDismiss={() => { removeDeliveredNotification(n.apnsIdentifier); dismissNotification(n.id); decrementBadge(); }}
             />
           ))}
         </View>
@@ -525,15 +525,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#006559',
+    shadowColor: '#006559',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#006559',
   },
   notifIcon: { marginRight: 10 },
   notifContent: { flex: 1, marginRight: 8 },

@@ -71,8 +71,8 @@ function addNotificationFromPayload(notification: any): void {
 
 /**
  * Pull any notifications still in the iOS Notification Center into the
- * in-app notification list, then clear them from the system tray.
- * Called when app comes to foreground so the user sees them as cards.
+ * in-app notification list. They stay in the notification center until
+ * the user dismisses the in-app card.
  */
 export function syncDeliveredNotifications(): void {
   if (Platform.OS !== 'ios') return;
@@ -86,7 +86,7 @@ export function syncDeliveredNotifications(): void {
       for (const n of notifications) {
         const title = n.title ?? '';
         const body = n.body ?? '';
-        // Avoid duplicates by checking if we already have a notification with same title+body
+        const apnsIdentifier = n.identifier ?? '';
         const isDuplicate = store.notifications.some(
           existing => existing.title === title && existing.body === body,
         );
@@ -96,13 +96,24 @@ export function syncDeliveredNotifications(): void {
             title,
             body,
             receivedAt: Date.now(),
+            apnsIdentifier,
           });
         }
       }
-      // Clear from notification center now that they're shown in-app
-      const ids = notifications.map((n: any) => n.identifier).filter(Boolean);
-      if (ids.length) PushNotificationIOS.removeDeliveredNotifications(ids);
     });
+  } catch {
+    // ignore
+  }
+}
+
+/** Remove a notification from the iOS Notification Center by its identifier. */
+export function removeDeliveredNotification(identifier?: string): void {
+  if (Platform.OS !== 'ios' || !identifier) return;
+  try {
+    const mod = require('@react-native-community/push-notification-ios');
+    const PushNotificationIOS = mod.default || mod;
+    if (!PushNotificationIOS?.removeDeliveredNotifications) return;
+    PushNotificationIOS.removeDeliveredNotifications([identifier]);
   } catch {
     // ignore
   }

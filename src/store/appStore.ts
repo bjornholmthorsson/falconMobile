@@ -6,6 +6,7 @@ export interface InAppNotification {
   title: string;
   body: string;
   receivedAt: number;
+  apnsIdentifier?: string; // iOS notification center identifier, for removal on dismiss
 }
 
 interface AppState {
