@@ -49,9 +49,10 @@ const SECOND_ACCOUNT_AUTH_CONFIG = {
 } as const;
 
 const BUFFER_MS = 5 * 60 * 1000;
+const PRIMARY_TOKEN_KEY = 'falcon_primary_token';
 const SECOND_ACCOUNT_KEY = 'falcon_second_account';
 
-// ── In-memory token store (primary) ──────────────────────────────────────────
+// ── Token store (primary) — persisted to AsyncStorage ────────────────────────
 
 interface MemToken {
   accessToken: string;
@@ -60,6 +61,14 @@ interface MemToken {
 }
 
 let memToken: MemToken | null = null;
+
+async function persistToken(token: MemToken): Promise<void> {
+  await AsyncStorage.setItem(PRIMARY_TOKEN_KEY, JSON.stringify(token));
+}
+
+async function clearPersistedToken(): Promise<void> {
+  await AsyncStorage.removeItem(PRIMARY_TOKEN_KEY);
+}
 
 // ── Sign in (primary) ─────────────────────────────────────────────────────────
 
@@ -70,12 +79,14 @@ export async function signIn(): Promise<void> {
     refreshToken: result.refreshToken ?? '',
     expiresAt: new Date(result.accessTokenExpirationDate).getTime(),
   };
+  await persistToken(memToken);
 }
 
 // ── Sign out (primary) ────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {
   memToken = null;
+  await clearPersistedToken();
 }
 
 // ── Token access (primary) ────────────────────────────────────────────────────
@@ -89,6 +100,7 @@ export async function getAccessToken(): Promise<string> {
 
   if (!memToken.refreshToken) {
     memToken = null;
+    await clearPersistedToken();
     throw new Error('Not authenticated');
   }
 
@@ -99,15 +111,48 @@ export async function getAccessToken(): Promise<string> {
       refreshToken: result.refreshToken ?? memToken.refreshToken,
       expiresAt: new Date(result.accessTokenExpirationDate).getTime(),
     };
+    await persistToken(memToken);
     return memToken.accessToken;
   } catch {
     memToken = null;
+    await clearPersistedToken();
     throw new Error('Not authenticated');
   }
 }
 
+/**
+ * Check if the user has a cached session. On cold start, tries to restore
+ * the persisted refresh token and silently acquire a new access token —
+ * no browser, no account picker.
+ */
 export async function isSignedIn(): Promise<boolean> {
-  return memToken !== null;
+  if (memToken) return true;
+
+  try {
+    const raw = await AsyncStorage.getItem(PRIMARY_TOKEN_KEY);
+    if (!raw) return false;
+    const stored: MemToken = JSON.parse(raw);
+
+    // If access token is still valid, use it directly
+    if (Date.now() < stored.expiresAt - BUFFER_MS) {
+      memToken = stored;
+      return true;
+    }
+
+    // Try silent refresh
+    if (!stored.refreshToken) return false;
+    const result = await refresh(AUTH_CONFIG, { refreshToken: stored.refreshToken });
+    memToken = {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken ?? stored.refreshToken,
+      expiresAt: new Date(result.accessTokenExpirationDate).getTime(),
+    };
+    await persistToken(memToken);
+    return true;
+  } catch {
+    await clearPersistedToken();
+    return false;
+  }
 }
 
 // ── Second account (persisted in AsyncStorage) ────────────────────────────────
