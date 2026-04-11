@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
 import { getUserSettings, getUserTokens } from '../services/api';
-import { setupPushNotifications, clearBadge } from '../services/notificationService';
+import { setupPushNotifications, syncDeliveredNotifications } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
 
 /**
@@ -36,11 +36,11 @@ export function useLoadCurrentUser() {
     }
   }, []);
 
-  // Clear badge when app comes to foreground
+  // Sync delivered notifications into in-app cards when app comes to foreground
   useEffect(() => {
-    clearBadge();
+    syncDeliveredNotifications();
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') clearBadge();
+      if (state === 'active') syncDeliveredNotifications();
     });
     return () => sub.remove();
   }, []);
