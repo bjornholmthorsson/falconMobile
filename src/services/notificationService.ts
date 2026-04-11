@@ -2,12 +2,40 @@ import { Platform } from 'react-native';
 import { registerDeviceToken } from './api';
 import { useAppStore } from '../store/appStore';
 
+let listenerSetUp = false;
+
+/**
+ * Set up notification event listeners immediately on app start (before auth).
+ * This ensures we capture notifications that arrive while the app is loading.
+ */
+export function setupNotificationListeners(): void {
+  if (Platform.OS !== 'ios' || listenerSetUp) return;
+  listenerSetUp = true;
+
+  let PushNotificationIOS: any;
+  try {
+    const mod = require('@react-native-community/push-notification-ios');
+    PushNotificationIOS = mod.default || mod;
+    if (!PushNotificationIOS?.addEventListener) return;
+  } catch {
+    return;
+  }
+
+  // Handle incoming notifications (foreground + when app is opened from one)
+  PushNotificationIOS.addEventListener('notification', (notification: any) => {
+    addNotificationFromPayload(notification);
+    notification.finish(PushNotificationIOS.FetchResult.NoData);
+  });
+
+  // Check for notification that launched the app (tapped while app was killed)
+  PushNotificationIOS.getInitialNotification?.().then((notification: any) => {
+    if (notification) addNotificationFromPayload(notification);
+  });
+}
+
 /**
  * Requests notification permission and registers the APNs device token
  * with the backend. Call once after the user is authenticated.
- *
- * Uses a lazy require so the native module is only accessed when actually
- * needed — prevents a crash on simulators where APNs is unavailable.
  */
 export async function setupPushNotifications(userId: string): Promise<void> {
   if (Platform.OS !== 'ios') return;
@@ -18,7 +46,7 @@ export async function setupPushNotifications(userId: string): Promise<void> {
     PushNotificationIOS = mod.default || mod;
     if (!PushNotificationIOS?.requestPermissions) return;
   } catch {
-    return; // native module unavailable (e.g. simulator)
+    return;
   }
 
   let permissions: any;
@@ -41,17 +69,6 @@ export async function setupPushNotifications(userId: string): Promise<void> {
     } catch {
       // Non-critical — will retry on next launch
     }
-  });
-
-  // Handle incoming notifications (foreground + when app is opened from one)
-  PushNotificationIOS.addEventListener('notification', (notification: any) => {
-    addNotificationFromPayload(notification);
-    notification.finish(PushNotificationIOS.FetchResult.NoData);
-  });
-
-  // Check for notification that launched the app (tapped while app was killed)
-  PushNotificationIOS.getInitialNotification().then((notification: any) => {
-    if (notification) addNotificationFromPayload(notification);
   });
 }
 

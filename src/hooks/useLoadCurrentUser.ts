@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
 import { getUserSettings, getUserTokens } from '../services/api';
-import { setupPushNotifications, syncDeliveredNotifications } from '../services/notificationService';
+import { setupPushNotifications, setupNotificationListeners, syncDeliveredNotifications } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
 
 /**
@@ -25,6 +25,7 @@ export function useLoadCurrentUser() {
     if (restoredRef.current) return;
     restoredRef.current = true;
     useAppStore.getState().loadNotifications();
+    setupNotificationListeners();
     if (!isAuthenticated) {
       isSignedIn()
         .then(signed => {
