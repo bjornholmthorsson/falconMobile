@@ -24,6 +24,7 @@ import {
 import AdminTokenScreen from './AdminTokenScreen';
 import { signOut, signInSecondAccount, signOutSecondAccount, getSecondAccountEmail } from '../services/authService';
 import { useAppStore } from '../store/appStore';
+import { clearBadge } from '../services/notificationService';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version: APP_VERSION } = require('../../package.json') as { version: string };
 
@@ -34,6 +35,8 @@ export default function ProfileScreen() {
   const checkinEnabled     = useAppStore(s => s.checkinEnabled);
   const setCheckinEnabled  = useAppStore(s => s.setCheckinEnabled);
   const userTokens         = useAppStore(s => s.userTokens);
+  const notifications      = useAppStore(s => s.notifications);
+  const clearAllNotifications = useAppStore(s => s.clearAllNotifications);
   const [adminOpen, setAdminOpen] = useState(false);
   const qc = useQueryClient();
 
@@ -423,6 +426,31 @@ export default function ProfileScreen() {
                 <View>
                   <Text style={styles.settingsRowTitle}>Manage User Tokens</Text>
                   <Text style={styles.settingsRowSub}>Grant or revoke access tokens</Text>
+                </View>
+              </View>
+              <Icon name="chevron-right" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {/* ── Notifications ── */}
+      {notifications.length > 0 && (
+        <>
+          <Text style={styles.sectionHeader}>Notifications</Text>
+          <View style={styles.settingsCard}>
+            <TouchableOpacity
+              style={styles.settingsRow}
+              onPress={() => { clearAllNotifications(); clearBadge(); }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingsRowLeft}>
+                <View style={[styles.settingsIcon, { backgroundColor: '#fee2e2' }]}>
+                  <Icon name="bell-off-outline" size={20} color="#dc2626" />
+                </View>
+                <View>
+                  <Text style={styles.settingsRowTitle}>Clear All Notifications</Text>
+                  <Text style={styles.settingsRowSub}>{notifications.length} notification{notifications.length !== 1 ? 's' : ''} pending</Text>
                 </View>
               </View>
               <Icon name="chevron-right" size={20} color="#9ca3af" />

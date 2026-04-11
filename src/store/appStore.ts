@@ -1,5 +1,8 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '../models';
+
+const NOTIF_STORAGE_KEY = '@falcon/notifications';
 
 export interface InAppNotification {
   id: string;
@@ -28,6 +31,8 @@ interface AppState {
   setCheckinEnabled: (enabled: boolean) => void;
   addNotification: (n: InAppNotification) => void;
   dismissNotification: (id: string) => void;
+  clearAllNotifications: () => void;
+  loadNotifications: () => void;
 }
 
 export const useAppStore = create<AppState>(set => ({
@@ -47,6 +52,25 @@ export const useAppStore = create<AppState>(set => ({
   setIsWorking: working => set({ isWorking: working }),
   setTeamOfficeFilter: offices => set({ teamOfficeFilter: offices }),
   setCheckinEnabled: enabled => set({ checkinEnabled: enabled }),
-  addNotification: n => set(s => ({ notifications: [n, ...s.notifications] })),
-  dismissNotification: id => set(s => ({ notifications: s.notifications.filter(n => n.id !== id) })),
+  addNotification: n => set(s => {
+    const notifications = [n, ...s.notifications];
+    AsyncStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications)).catch(() => {});
+    return { notifications };
+  }),
+  dismissNotification: id => set(s => {
+    const notifications = s.notifications.filter(n => n.id !== id);
+    AsyncStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications)).catch(() => {});
+    return { notifications };
+  }),
+  clearAllNotifications: () => {
+    AsyncStorage.removeItem(NOTIF_STORAGE_KEY).catch(() => {});
+    set({ notifications: [] });
+  },
+  loadNotifications: () => {
+    AsyncStorage.getItem(NOTIF_STORAGE_KEY).then(raw => {
+      if (raw) {
+        try { set({ notifications: JSON.parse(raw) }); } catch {}
+      }
+    }).catch(() => {});
+  },
 }));

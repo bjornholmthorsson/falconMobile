@@ -19,11 +19,12 @@ export function useLoadCurrentUser() {
   const setCheckinEnabled = useAppStore(s => s.setCheckinEnabled);
   const setUserTokens = useAppStore(s => s.setUserTokens);
 
-  // Restore auth state once on cold start
+  // Restore persisted notifications + auth state once on cold start
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
+    useAppStore.getState().loadNotifications();
     if (!isAuthenticated) {
       isSignedIn()
         .then(signed => {
