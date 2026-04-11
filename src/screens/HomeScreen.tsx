@@ -370,13 +370,13 @@ function LunchWeekCard({
 function NotificationBanner({ notification, onDismiss }: { notification: InAppNotification; onDismiss: () => void }) {
   return (
     <View style={styles.notifBanner}>
-      <Icon name="bell-ring" size={20} color="#006559" style={styles.notifIcon} />
-      <View style={styles.notifContent}>
-        {!!notification.title && <Text style={styles.notifTitle}>{notification.title}</Text>}
-        {!!notification.body && <Text style={styles.notifBody}>{notification.body}</Text>}
-      </View>
+      <Icon name="bell" size={22} color="#006559" style={styles.notifIcon} />
+      <Text style={styles.notifText}>
+        {!!notification.title && <Text style={styles.notifTitle}>{notification.title}: </Text>}
+        {notification.body}
+      </Text>
       <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Icon name="close-circle" size={20} color="#9ca3af" />
+        <Icon name="close" size={20} color="#006559" />
       </TouchableOpacity>
     </View>
   );
@@ -524,19 +524,12 @@ const styles = StyleSheet.create({
   notifBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#006559',
-    shadowColor: '#006559',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    backgroundColor: '#d1ede8',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  notifIcon: { marginRight: 10 },
-  notifContent: { flex: 1, marginRight: 8 },
-  notifTitle: { fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 },
-  notifBody: { fontSize: 13, color: '#555' },
+  notifIcon: { marginRight: 12 },
+  notifText: { flex: 1, fontSize: 14, color: '#374151', lineHeight: 20, marginRight: 10 },
+  notifTitle: { fontWeight: '700', color: '#111' },
 });
