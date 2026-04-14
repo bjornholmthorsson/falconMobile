@@ -191,7 +191,7 @@ export async function submitLunchOrders(
 export interface LunchOrderSummaryDay {
   dayOfWeek: string;
   date: string;
-  orders: { userId: string; displayName: string; category: string }[];
+  orders: { userId: string; displayName: string; category: string; categoryLabel?: string }[];
 }
 
 export interface LunchOrdersSummary {
@@ -204,10 +204,11 @@ export interface LunchOrdersSummary {
 export async function getLunchOrdersSummary(
   year: number,
   week: number,
+  lang: string = 'en',
   signal?: AbortSignal,
 ): Promise<LunchOrdersSummary> {
   return apiGet<LunchOrdersSummary>(
-    `/api/lunch-orders-summary?year=${year}&week=${week}&code=${CODE}`,
+    `/api/lunch-orders-summary?year=${year}&week=${week}&lang=${lang}&code=${CODE}`,
     signal,
   );
 }
