@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '../models';
 
 const NOTIF_STORAGE_KEY = '@falcon/notifications';
+const LANG_STORAGE_KEY = '@falcon/lunchLang';
 
 export interface InAppNotification {
   id: string;
@@ -21,6 +22,7 @@ interface AppState {
   checkinEnabled: boolean;
   userTokens: string[];
   notifications: InAppNotification[];
+  lunchLang: 'en' | 'is';
 
   setUserTokens: (tokens: string[]) => void;
   setCurrentUser: (user: User | null) => void;
@@ -33,6 +35,8 @@ interface AppState {
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
   loadNotifications: () => void;
+  setLunchLang: (lang: 'en' | 'is') => void;
+  loadLunchLang: () => void;
 }
 
 export const useAppStore = create<AppState>(set => ({
@@ -44,6 +48,7 @@ export const useAppStore = create<AppState>(set => ({
   checkinEnabled: false, // stays false until user settings are loaded from backend
   userTokens: [],
   notifications: [],
+  lunchLang: 'en',
 
   setUserTokens: tokens => set({ userTokens: tokens }),
   setCurrentUser: user => set({ currentUser: user }),
@@ -71,6 +76,15 @@ export const useAppStore = create<AppState>(set => ({
       if (raw) {
         try { set({ notifications: JSON.parse(raw) }); } catch {}
       }
+    }).catch(() => {});
+  },
+  setLunchLang: lang => {
+    AsyncStorage.setItem(LANG_STORAGE_KEY, lang).catch(() => {});
+    set({ lunchLang: lang });
+  },
+  loadLunchLang: () => {
+    AsyncStorage.getItem(LANG_STORAGE_KEY).then(raw => {
+      if (raw === 'en' || raw === 'is') set({ lunchLang: raw });
     }).catch(() => {});
   },
 }));

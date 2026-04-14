@@ -155,9 +155,10 @@ export async function getUserHistory(
 export async function getLunchMenu(
   year: number,
   week: number,
+  lang: string = 'en',
   signal?: AbortSignal,
 ): Promise<LunchWeek> {
-  return apiGet<LunchWeek>(`/api/lunch-menu?year=${year}&week=${week}&code=${CODE}`, signal);
+  return apiGet<LunchWeek>(`/api/lunch-menu?year=${year}&week=${week}&lang=${lang}&code=${CODE}`, signal);
 }
 
 export async function getLunchOrders(

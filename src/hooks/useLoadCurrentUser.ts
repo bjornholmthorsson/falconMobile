@@ -25,6 +25,7 @@ export function useLoadCurrentUser() {
     if (restoredRef.current) return;
     restoredRef.current = true;
     useAppStore.getState().loadNotifications();
+    useAppStore.getState().loadLunchLang();
     setupNotificationListeners();
     if (!isAuthenticated) {
       isSignedIn()

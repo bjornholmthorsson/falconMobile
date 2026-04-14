@@ -141,6 +141,7 @@ export interface OfficeSummary {
 
 export interface LunchOption {
   category: string;
+  categoryLabel: string;
   description: string;
 }
 

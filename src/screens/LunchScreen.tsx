@@ -31,8 +31,21 @@ function isoWeekYear(date: Date): number {
   return d.getUTCFullYear();
 }
 
-const DAY_SHORT: Record<string, string> = {
-  Monday: 'MON', Tuesday: 'TUE', Wednesday: 'WED', Thursday: 'THU', Friday: 'FRI',
+const DAY_SHORT: Record<string, Record<string, string>> = {
+  en: { Monday: 'MON', Tuesday: 'TUE', Wednesday: 'WED', Thursday: 'THU', Friday: 'FRI' },
+  is: { Monday: 'MÁN', Tuesday: 'ÞRI', Wednesday: 'MIÐ', Thursday: 'FIM', Friday: 'FÖS' },
+};
+
+const HOLIDAY_IS: Record<string, string> = {
+  'First Day of Summer': 'Sumardagurinn fyrsti',
+  'Maundy Thursday': 'Skírdagur',
+  'Good Friday': 'Föstudagurinn langi',
+  'Easter Monday': 'Annar í páskum',
+};
+
+const UI_STRINGS: Record<string, Record<string, string>> = {
+  en: { menu: "'s Menu", order: 'Current Order', noMenu: 'No menu for this week!' },
+  is: { menu: ' matseðill', order: 'Pöntun vikunnar', noMenu: 'Enginn matseðill fyrir þessa viku!' },
 };
 
 // ── Food tile helpers ─────────────────────────────────────────────────────────
@@ -67,6 +80,10 @@ function relevantWeekDate(): Date {
 export default function LunchScreen() {
   const currentUser = useAppStore(s => s.currentUser);
   const userId = currentUser?.id ?? '';
+  const lang = useAppStore(s => s.lunchLang);
+  const setLang = useAppStore(s => s.setLunchLang);
+  const strings = UI_STRINGS[lang] ?? UI_STRINGS.en;
+  const dayShort = DAY_SHORT[lang] ?? DAY_SHORT.en;
 
   const now = relevantWeekDate();
   const [year, setYear]           = useState(isoWeekYear(now));
@@ -84,8 +101,8 @@ export default function LunchScreen() {
   }, []));
 
   const { data, isFetching, isError } = useQuery<LunchWeek>({
-    queryKey: ['lunchMenu', year, week],
-    queryFn: () => getLunchMenu(year, week),
+    queryKey: ['lunchMenu', year, week, lang],
+    queryFn: () => getLunchMenu(year, week, lang),
     staleTime: 10 * 60 * 1000,
   });
 
@@ -184,13 +201,31 @@ export default function LunchScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Language toggle ── */}
+      <View style={styles.langRow}>
+        <View style={styles.langToggle}>
+          <TouchableOpacity
+            style={[styles.langBtn, lang === 'en' && styles.langBtnActive]}
+            onPress={() => setLang('en')}
+          >
+            <Text style={[styles.langBtnText, lang === 'en' && styles.langBtnTextActive]}>EN</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, lang === 'is' && styles.langBtnActive]}
+            onPress={() => setLang('is')}
+          >
+            <Text style={[styles.langBtnText, lang === 'is' && styles.langBtnTextActive]}>IS</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {isFetching ? (
         <View style={styles.centered}>
           <ActivityIndicator color="#fff" size="large" />
         </View>
       ) : isError || !data ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No menu for this week!</Text>
+          <Text style={styles.emptyText}>{strings.noMenu}</Text>
         </View>
       ) : (
         <>
@@ -208,7 +243,7 @@ export default function LunchScreen() {
                     onPress={() => setActiveDayId(day.id)}
                   >
                     <Text style={[styles.dayPillShort, isActive && styles.dayPillTextActive]}>
-                      {DAY_SHORT[day.dayOfWeek] ?? day.dayOfWeek.slice(0, 3).toUpperCase()}
+                      {dayShort[day.dayOfWeek] ?? day.dayOfWeek.slice(0, 3).toUpperCase()}
                     </Text>
                     <Text style={[styles.dayPillDate, isActive && styles.dayPillTextActive]}>
                       {dateNum}
@@ -229,11 +264,13 @@ export default function LunchScreen() {
             activeDay.holiday ? (
               <View style={styles.holidayCard}>
                 <Icon name="calendar-remove-outline" size={28} color="#9ca3af" />
-                <Text style={styles.holidayCardText}>{activeDay.holiday}</Text>
+                <Text style={styles.holidayCardText}>
+                  {lang === 'is' ? (HOLIDAY_IS[activeDay.holiday ?? ''] ?? activeDay.holiday) : activeDay.holiday}
+                </Text>
               </View>
             ) : (
               <View style={styles.menuCard}>
-                <Text style={styles.menuCardTitle}>{activeDay.dayOfWeek}'s Menu</Text>
+                <Text style={styles.menuCardTitle}>{activeDay.dayOfWeek}{strings.menu}</Text>
                 {activeDay.options.map((opt, index) => {
                   const selected = selections[activeDay.id] === opt.category;
                   const isFirst  = index === 0;
@@ -255,7 +292,7 @@ export default function LunchScreen() {
                       <View style={styles.menuItemLeft}>
 
                         <Text style={[styles.menuItemName, selected && styles.menuItemNameSelected]}>
-                          {opt.category}
+                          {opt.categoryLabel || opt.category}
                         </Text>
                         {opt.description ? (
                           <Text style={styles.menuItemDesc}>{opt.description}</Text>
@@ -283,7 +320,7 @@ export default function LunchScreen() {
             <View style={styles.orderCard}>
               <View style={styles.orderCardHeader}>
                 <Icon name="cart-outline" size={18} color="#006559" />
-                <Text style={styles.orderCardTitle}>Current Order</Text>
+                <Text style={styles.orderCardTitle}>{strings.order}</Text>
                 {saving && <ActivityIndicator size="small" color="#006559" style={{ marginLeft: 8 }} />}
               </View>
 
@@ -298,7 +335,7 @@ export default function LunchScreen() {
                       <Text style={styles.orderRowName}>
                       {day.date ? `${new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ` : ''}{day.dayOfWeek}
                     </Text>
-                      <Text style={styles.orderRowDay}>{option.category}</Text>
+                      <Text style={styles.orderRowDay}>{option.categoryLabel || option.category}</Text>
                     </View>
                   </View>
                 );
@@ -338,6 +375,23 @@ const styles = StyleSheet.create({
   restaurantLabel:    { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   weekLabel:          { fontSize: 17, fontWeight: '800', color: '#fff', textAlign: 'center' },
   weekNumber:         { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+
+  // Language toggle
+  langRow: { alignItems: 'center', marginBottom: 4 },
+  langToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+    padding: 2,
+  },
+  langBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  langBtnActive: { backgroundColor: '#fff' },
+  langBtnText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.5 },
+  langBtnTextActive: { color: '#006559' },
 
   // Day selector
   daySelectorWrapper: { height: 84, justifyContent: 'center', marginBottom: 4 },

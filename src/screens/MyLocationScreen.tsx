@@ -123,6 +123,20 @@ export default function MyLocationScreen() {
     return markers;
   }, [history, locationCoordMap]);
 
+  // Public locations + user's own private locations, deduplicated
+  const visibleLocations = useMemo(() => {
+    const publicLocs = allKnownLocations.filter(loc => loc.isPublic);
+    const seen = new Set(publicLocs.map(loc => loc.id));
+    const merged = [...publicLocs];
+    for (const loc of knownUserLocations) {
+      if (!seen.has(loc.id)) {
+        merged.push(loc);
+      }
+    }
+    return merged.filter(loc => loc.location?.coordinates != null)
+      .sort((a, b) => a.placeName.localeCompare(b.placeName));
+  }, [allKnownLocations, knownUserLocations]);
+
   // The logged-in user's own Home entry (client_name = 'Home', user_id = current user)
   const homeLocation = useMemo(
     () => knownUserLocations.find(l => l.placeName === 'Home' && l.id === currentUser?.id),
@@ -142,6 +156,17 @@ export default function MyLocationScreen() {
     }
     return { latitude: 64.1355, longitude: -21.8954, latitudeDelta: 0.1, longitudeDelta: 0.1 };
   }, [currentRegion, homeLocation]);
+
+  function focusLocation(loc: KnownLocation) {
+    if (!loc.location?.coordinates) return;
+    const region = {
+      latitude: loc.location.coordinates[0],
+      longitude: loc.location.coordinates[1],
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    };
+    mapRef.current?.animateToRegion(region, 600);
+  }
 
   function shiftDate(days: number) {
     setSelectedDate(d => {
@@ -243,25 +268,23 @@ export default function MyLocationScreen() {
         showsMyLocationButton
         onLongPress={e => setPinnedCoordinate(e.nativeEvent.coordinate)}
       >
-        {/* User's known locations — labelled pins */}
-        {knownUserLocations.map(loc =>
-          loc.location?.coordinates ? (
-            <Marker
-              key={`known-${loc.id}-${loc.placeName}`}
-              coordinate={{
-                latitude: loc.location.coordinates[0],
-                longitude: loc.location.coordinates[1],
-              }}
-              pinColor={loc.placeName === 'Home' ? '#006559' : '#f97316'}
-            >
-              <Callout tooltip>
-                <View style={styles.callout}>
-                  <Text style={styles.calloutText}>{loc.placeName}</Text>
-                </View>
-              </Callout>
-            </Marker>
-          ) : null
-        )}
+        {/* Public + user's own known locations */}
+        {visibleLocations.map(loc => (
+          <Marker
+            key={`known-${loc.id}-${loc.placeName}`}
+            coordinate={{
+              latitude: loc.location.coordinates[0],
+              longitude: loc.location.coordinates[1],
+            }}
+            pinColor={loc.isPublic ? '#006559' : '#f97316'}
+          >
+            <Callout tooltip>
+              <View style={styles.callout}>
+                <Text style={styles.calloutText}>{loc.placeName}</Text>
+              </View>
+            </Callout>
+          </Marker>
+        ))}
         {/* Locations visited today */}
         {historyMarkers.map(marker => (
           <Marker
@@ -309,6 +332,25 @@ export default function MyLocationScreen() {
               {pinnedCoordinate ? 'Set Known Location' : 'Long-press map to pin a location'}
             </Text>
           </TouchableOpacity>
+        )}
+
+        <Text style={styles.locationsTitle}>Known Locations</Text>
+        {visibleLocations.length === 0 ? (
+          <Text style={styles.empty}>No known locations.</Text>
+        ) : (
+          visibleLocations.map(loc => (
+            <TouchableOpacity
+              key={`list-${loc.id}-${loc.placeName}`}
+              style={styles.locationRow}
+              onPress={() => focusLocation(loc)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.locationDot, loc.isPublic ? styles.dotPublic : styles.dotPrivate]} />
+              <Text style={styles.locationName} numberOfLines={1}>{loc.placeName}</Text>
+              <Text style={styles.locationBadge}>{loc.isPublic ? 'Public' : 'Private'}</Text>
+              <Text style={styles.locationArrow}>›</Text>
+            </TouchableOpacity>
+          ))
         )}
 
         <View style={styles.dateNav}>
@@ -400,6 +442,23 @@ const styles = StyleSheet.create({
   historyTime: { fontSize: 13, color: '#555', fontWeight: '500', textAlign: 'right' },
   historyLocation: { flex: 1, fontSize: 14, color: '#111', fontWeight: '500' },
   empty: { textAlign: 'center', color: '#999', marginTop: 20, fontSize: 15 },
+  locationsTitle: { fontSize: 15, fontWeight: '700', color: '#374151', marginBottom: 8, marginTop: 4 },
+  locationRow: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 10,
+  },
+  locationDot: { width: 10, height: 10, borderRadius: 5 },
+  dotPublic: { backgroundColor: '#006559' },
+  dotPrivate: { backgroundColor: '#f97316' },
+  locationName: { flex: 1, fontSize: 14, fontWeight: '500', color: '#111' },
+  locationBadge: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
+  locationArrow: { fontSize: 20, color: '#9ca3af', marginLeft: 2 },
   callout: {
     backgroundColor: '#fff',
     borderRadius: 8,

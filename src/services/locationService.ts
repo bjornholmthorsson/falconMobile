@@ -11,6 +11,7 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getKnownLocations,
+  getKnownUserLocations,
   postLocation,
 } from './api';
 import type { KnownLocation } from '../models';
@@ -89,8 +90,9 @@ export function getCurrentPosition(): Promise<GeoPosition> {
 export async function resolveLocationName(
   latitude: number,
   longitude: number,
+  userId?: string,
 ): Promise<string> {
-  const known = await getCachedKnownLocations();
+  const known = await getCachedKnownLocations(userId);
   if (!known.length) return 'unknown';
 
   const withDistance = known
@@ -117,7 +119,7 @@ async function handlePositionUpdate(
   userId: string,
 ): Promise<void> {
   const { latitude, longitude } = position.coords;
-  const locationName = await resolveLocationName(latitude, longitude);
+  const locationName = await resolveLocationName(latitude, longitude, userId);
 
   // Don't record positions that don't match a known location
   if (locationName === 'unknown') return;
@@ -133,19 +135,37 @@ async function handlePositionUpdate(
   }
 }
 
-async function getCachedKnownLocations(): Promise<KnownLocation[]> {
+async function getCachedKnownLocations(
+  userId?: string,
+): Promise<KnownLocation[]> {
   try {
-    const cached = await AsyncStorage.getItem(CACHE_KEY);
+    const cacheKey = userId ? `${CACHE_KEY}/${userId}` : CACHE_KEY;
+    const cached = await AsyncStorage.getItem(cacheKey);
     if (cached) {
       const { data, timestamp } = JSON.parse(cached);
       if (Date.now() - timestamp < CACHE_TTL_MS) return data;
     }
-    const fresh = await getKnownLocations();
+
+    // Fetch public locations + the current user's own (private) locations,
+    // then merge and deduplicate so other users' private locations are excluded.
+    const [allLocations, userLocations] = await Promise.all([
+      getKnownLocations(),
+      userId ? getKnownUserLocations(userId) : Promise.resolve([]),
+    ]);
+    const publicLocations = allLocations.filter(loc => loc.isPublic);
+    const seen = new Set(publicLocations.map(loc => loc.id));
+    const merged = [...publicLocations];
+    for (const loc of userLocations) {
+      if (!seen.has(loc.id)) {
+        merged.push(loc);
+      }
+    }
+
     await AsyncStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({ data: fresh, timestamp: Date.now() }),
+      cacheKey,
+      JSON.stringify({ data: merged, timestamp: Date.now() }),
     );
-    return fresh;
+    return merged;
   } catch {
     return [];
   }
