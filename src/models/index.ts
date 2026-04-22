@@ -102,6 +102,7 @@ export interface UserData {
   slackMemberId: string | null;
   jiraUsername: string | null;
   secondCalendarEmail: string | null;
+  displayName: string | null;
 }
 
 export interface TeamsPresence {

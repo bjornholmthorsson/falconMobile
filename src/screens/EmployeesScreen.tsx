@@ -16,10 +16,11 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import {
-  getUsersByOffice,
+  getUsersByDepartment,
   getPresenceForUsers,
   getUserPhoto,
-  OFFICES,
+  DEPARTMENTS,
+  getDepartmentLabel,
 } from '../services/graphService';
 import { getUserAbsences, getUserLocations, getUserData } from '../services/api';
 import { useAppStore } from '../store/appStore';
@@ -113,19 +114,20 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
                 </TouchableOpacity>
               )}
             </View>
-            {/* Office filter chips */}
+            {/* Department filter chips */}
             <View style={styles.filterRow}>
-              {OFFICES.map(office => {
-                const active = officeFilter.includes(office);
+              {DEPARTMENTS.map(dept => {
+                const active = officeFilter.includes(dept);
+                const label = getDepartmentLabel(dept);
                 return (
                   <TouchableOpacity
-                    key={office}
+                    key={dept}
                     style={[styles.filterChip, active && styles.filterChipActive]}
-                    onPress={() => toggleOffice(office)}
+                    onPress={() => toggleOffice(dept)}
                     activeOpacity={0.75}
                   >
                     <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                      {office}
+                      {label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -293,7 +295,7 @@ function statusStyle(availability: string): {
 
 async function fetchAllEmployees(): Promise<Employee[]> {
   const [officeResults, absences, locations, userData] = await Promise.all([
-    Promise.allSettled(OFFICES.map(office => getUsersByOffice(office).then(users => ({ office, users })))),
+    Promise.allSettled(DEPARTMENTS.map(dept => getUsersByDepartment(dept).then(users => ({ office: dept, users })))),
     getUserAbsences().catch(() => [] as UserAbsence[]),
     getUserLocations().catch(() => [] as UserLocation[]),
     getUserData().catch(() => [] as UserData[]),
@@ -310,7 +312,7 @@ async function fetchAllEmployees(): Promise<Employee[]> {
     }
   }
 
-  const EXCLUDED_NAME_PATTERNS = /meeting room|phone booth|admin|migration|service account|bot|test user|noreply/i;
+  const EXCLUDED_NAME_PATTERNS = /meeting room|phone booth|admin|migration|service account|bot|test user|noreply|conference room|room\b/i;
   const activeUsers = [...userMap.values()].filter(
     ({ user }) => user.accountEnabled && !EXCLUDED_NAME_PATTERNS.test(user.displayName),
   );

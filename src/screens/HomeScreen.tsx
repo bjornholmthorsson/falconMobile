@@ -15,9 +15,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { getUsersByOffice, getPresenceForUsers, OFFICES } from '../services/graphService';
+import { getUsersByDepartment, getPresenceForUsers, DEPARTMENTS, getDepartmentLabel, getDepartmentOffices, loadDepartmentLabels } from '../services/graphService';
 import { getUserAbsences, getLunchMenu, getLunchOrders } from '../services/api';
 import { signOut } from '../services/authService';
 import { useAppStore, type InAppNotification } from '../store/appStore';
@@ -26,16 +26,25 @@ import type { OfficeSummary, LunchWeek } from '../models';
 
 const CARD_SIZE = (Dimensions.get('window').width - 48) / 2;
 
-// ── City config ───────────────────────────────────────────────────────────────
-const CITY_CONFIG: Record<string, { lat: number; lon: number; image: any }> = {
-  'Amsterdam':   { lat: 52.3676, lon: 4.9041,   image: require('../assets/images/cities/amsterdam.jpg') },
-  'Reykjavik':   { lat: 64.1355, lon: -21.8954,  image: require('../assets/images/cities/reykjavik.jpg') },
-  'Ho Chi Minh': { lat: 10.8231, lon: 106.6297,  image: require('../assets/images/cities/hochiminh.jpg') },
-  'Lisbon':      { lat: 38.7223, lon: -9.1393,   image: require('../assets/images/cities/lisbon.jpg') },
+const CITY_IMAGES: Record<string, any> = {
+  'Amsterdam':   require('../assets/images/cities/amsterdam.jpg'),
+  'Reykjavik':   require('../assets/images/cities/reykjavik.jpg'),
+  'Ho Chi Minh': require('../assets/images/cities/hochiminh.jpg'),
+  'Lisbon':      require('../assets/images/cities/lisbon.jpg'),
+  'Deventer':    require('../assets/images/cities/deventer.jpg'),
+  'Gouda':       require('../assets/images/cities/gouda.jpg'),
 };
 
-// ── Weather helpers ───────────────────────────────────────────────────────────
-type WeatherInfo = { temp: number; icon: string; isDay: boolean };
+const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
+  'Amsterdam':   { lat: 52.3676, lon: 4.9041 },
+  'Reykjavik':   { lat: 64.1355, lon: -21.8954 },
+  'Ho Chi Minh': { lat: 10.8231, lon: 106.6297 },
+  'Lisbon':      { lat: 38.7223, lon: -9.1393 },
+  'Deventer':    { lat: 52.2554, lon: 6.1600 },
+  'Gouda':       { lat: 52.0115, lon: 4.7104 },
+};
+
+type WeatherInfo = { temp: number; icon: string };
 
 function weatherIcon(code: number, isDay: boolean): string {
   if (code === 0)                         return isDay ? 'weather-sunny'            : 'weather-night';
@@ -53,13 +62,10 @@ async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo> {
   if (!res.ok) throw new Error(`Weather API ${res.status}`);
   const json = await res.json();
   const cw = json.current_weather;
-  if (!cw || cw.temperature == null || cw.weathercode == null) {
-    throw new Error('Unexpected weather response');
-  }
+  if (!cw || cw.temperature == null || cw.weathercode == null) throw new Error('Bad weather data');
   return {
     temp: Math.round(cw.temperature),
     icon: weatherIcon(cw.weathercode, cw.is_day === 1),
-    isDay: cw.is_day === 1,
   };
 }
 
@@ -114,9 +120,14 @@ export default function HomeScreen() {
   const dismissNotification = useAppStore(s => s.dismissNotification);
   const navigation = useNavigation<any>();
   const queryClient = useQueryClient();
+  const [cycle, setCycle] = useState(0);
 
-  function handleCityCardPress(office: string) {
-    setTeamOfficeFilter([office]);
+  useFocusEffect(useCallback(() => {
+    setCycle(c => c + 1);
+  }, []));
+
+  function handleDeptCardPress(department: string) {
+    setTeamOfficeFilter([department]);
     navigation.navigate('Team');
   }
 
@@ -141,6 +152,7 @@ export default function HomeScreen() {
 
   async function handlePullRefresh() {
     setIsLunchRefreshing(true);
+    setCycle(c => c + 1);
     await Promise.all([
       refetch(),
       refetchMenu(),
@@ -231,7 +243,7 @@ export default function HomeScreen() {
       </View>
       <View style={styles.grid}>
         {(data ?? []).map(summary => (
-          <OfficeSummaryCard key={summary.office} summary={summary} onPress={() => handleCityCardPress(summary.office)} />
+          <DepartmentCard key={summary.office} summary={summary} cycle={cycle} onPress={() => handleDeptCardPress(summary.office)} />
         ))}
       </View>
       {lunchMenu && (
@@ -245,17 +257,24 @@ export default function HomeScreen() {
   );
 }
 
-function OfficeSummaryCard({ summary, onPress }: { summary: OfficeSummary; onPress: () => void }) {
+function DepartmentCard({ summary, cycle, onPress }: { summary: OfficeSummary; cycle: number; onPress: () => void }) {
   const total = summary.available + summary.away + summary.busy + summary.offline;
-  const city = CITY_CONFIG[summary.office];
+  const label = getDepartmentLabel(summary.office);
+  const offices = getDepartmentOffices(summary.office);
+
+  const currentCity = offices.length > 0
+    ? offices[cycle % offices.length]
+    : '';
+  const image = CITY_IMAGES[currentCity];
+  const coords = CITY_COORDS[currentCity];
 
   const { data: weather } = useQuery<WeatherInfo>({
-    queryKey: ['weather', summary.office],
-    queryFn: () => fetchWeather(city.lat, city.lon),
+    queryKey: ['weather', currentCity],
+    queryFn: () => fetchWeather(coords!.lat, coords!.lon),
     staleTime: 10 * 60 * 1000,
-    gcTime: 60 * 60 * 1000, // keep last good value for 1 hour even if refetch fails
+    gcTime: 60 * 60 * 1000,
     retry: 2,
-    enabled: !!city,
+    enabled: !!coords,
   });
 
   const dots = [
@@ -265,54 +284,60 @@ function OfficeSummaryCard({ summary, onPress }: { summary: OfficeSummary; onPre
     { color: '#9ca3af', count: summary.offline },
   ];
 
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.cityCard}>
-    <ImageBackground
-      source={city?.image}
-      style={StyleSheet.absoluteFill}
-      imageStyle={styles.cityCardImage}
-    >
-      <View style={styles.cityCardOverlay}>
-        {/* Top row: count + weather */}
-        <View style={styles.cityCardTop}>
-          <View style={styles.cityCountRow}>
-            <Text style={styles.cityCount}>{String(total).padStart(2, '0')}</Text>
-            <Icon name="account-group" size={18} color="rgba(255,255,255,0.75)" style={styles.cityCountIcon} />
+  const content = (
+    <>
+      <View style={styles.cityCardTop}>
+        <View style={styles.cityCountRow}>
+          <Text style={styles.cityCount}>{String(total).padStart(2, '0')}</Text>
+          <Icon name="account-group" size={18} color="rgba(255,255,255,0.75)" style={styles.cityCountIcon} />
+        </View>
+        {weather && (
+          <View style={styles.weatherBadge}>
+            <Icon name={weather.icon} size={18} color="#fff" />
+            <Text style={styles.weatherTemp}>{weather.temp}°</Text>
           </View>
-          {weather && (
-            <View style={styles.weatherBadge}>
-              <Icon name={weather.icon} size={18} color="#fff" />
-              <Text style={styles.weatherTemp}>{weather.temp}°</Text>
-            </View>
+        )}
+      </View>
+      <View>
+        <Text style={styles.cityName} numberOfLines={2}>{label.toUpperCase()}</Text>
+        {currentCity ? (
+          <Text style={styles.citySubtitle}>{currentCity}{offices.length > 1 ? ` +${offices.length - 1}` : ''}</Text>
+        ) : null}
+      </View>
+      <View>
+        <View style={styles.cityDots}>
+          {dots.filter(d => d.count > 0).map((d, i) => (
+            <View key={i} style={[styles.cityDot, { backgroundColor: d.color }]} />
+          ))}
+        </View>
+        <View style={styles.citySegmentBar}>
+          {dots.map((d, i) =>
+            d.count > 0 ? (
+              <View
+                key={i}
+                style={[
+                  styles.citySegmentFill,
+                  { flex: d.count / total, backgroundColor: d.color },
+                  i === 0 && styles.segmentFirst,
+                  i === dots.length - 1 && styles.segmentLast,
+                ]}
+              />
+            ) : null,
           )}
         </View>
-        {/* City name */}
-        <Text style={styles.cityName}>{summary.office.toUpperCase()}</Text>
-        {/* Status dots + segment bar */}
-        <View>
-          <View style={styles.cityDots}>
-            {dots.filter(d => d.count > 0).map((d, i) => (
-              <View key={i} style={[styles.cityDot, { backgroundColor: d.color }]} />
-            ))}
-          </View>
-          <View style={styles.citySegmentBar}>
-            {dots.map((d, i) =>
-              d.count > 0 ? (
-                <View
-                  key={i}
-                  style={[
-                    styles.citySegmentFill,
-                    { flex: d.count / total, backgroundColor: d.color },
-                    i === 0 && styles.segmentFirst,
-                    i === dots.length - 1 && styles.segmentLast,
-                  ]}
-                />
-              ) : null,
-            )}
-          </View>
-        </View>
       </View>
-    </ImageBackground>
+    </>
+  );
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.cityCard}>
+      {image ? (
+        <ImageBackground source={image} style={StyleSheet.absoluteFill} imageStyle={styles.cityCardImage}>
+          <View style={styles.cityCardOverlay}>{content}</View>
+        </ImageBackground>
+      ) : (
+        <View style={styles.cityCardFallback}>{content}</View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -383,6 +408,7 @@ function NotificationBanner({ notification, onDismiss }: { notification: InAppNo
 }
 
 async function fetchAllOfficeSummaries(): Promise<OfficeSummary[]> {
+  await loadDepartmentLabels();
   return Promise.race([doFetch(), hardTimeout(12_000)]);
 }
 
@@ -394,9 +420,9 @@ function hardTimeout(ms: number): Promise<never> {
 
 async function doFetch(): Promise<OfficeSummary[]> {
   const results = await Promise.allSettled(
-    OFFICES.map(async office => {
-      const EXCLUDED = /meeting room|phone booth|admin/i;
-      const users = await getUsersByOffice(office);
+    DEPARTMENTS.map(async department => {
+      const EXCLUDED = /meeting room|phone booth|admin|migration|service account|bot|test user|noreply|conference room|room\b/i;
+      const users = await getUsersByDepartment(department);
       const activeIds = users.filter(u => u.accountEnabled && !EXCLUDED.test(u.displayName)).map(u => u.id);
       const presences = activeIds.length
         ? await getPresenceForUsers(activeIds)
@@ -422,7 +448,7 @@ async function doFetch(): Promise<OfficeSummary[]> {
             offline++;
         }
       }
-      const summary: OfficeSummary = { office, available, away, busy, offline };
+      const summary: OfficeSummary = { office: department, available, away, busy, offline };
       return summary;
     }),
   );
@@ -476,17 +502,25 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'space-between',
   },
+  cityCardFallback: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: '#475569',
+    padding: 14,
+    justifyContent: 'space-between',
+  },
   cityCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   cityCountRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   cityCount: { fontSize: 38, fontWeight: '800', color: '#fff', letterSpacing: -1 },
   cityCountIcon: { marginBottom: 6 },
+  cityName: { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 1.2 },
+  citySubtitle: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   weatherBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
   },
   weatherTemp: { fontSize: 13, fontWeight: '700', color: '#fff' },
-  cityName: { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 1.2 },
   cityDots: { flexDirection: 'row', gap: 5, marginBottom: 6 },
   cityDot: { width: 8, height: 8, borderRadius: 4 },
   citySegmentBar: { height: 5, flexDirection: 'row', borderRadius: 3, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.2)' },

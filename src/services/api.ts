@@ -589,3 +589,15 @@ export async function revokeUserToken(
   );
   if (!res.ok) throw new Error(`API ${res.status}`);
 }
+
+// ── Departments ──────────────────────────────────────────────────────────────
+
+export interface DepartmentMapping {
+  department: string;
+  displayName: string;
+  offices: string[];
+}
+
+export async function getDepartments(signal?: AbortSignal): Promise<DepartmentMapping[]> {
+  return apiGet<DepartmentMapping[]>(`/api/departments?code=${CODE}`, signal);
+}

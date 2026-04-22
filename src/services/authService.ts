@@ -11,14 +11,13 @@ import { authorize, refresh } from 'react-native-app-auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CLIENT_ID = '3639c730-2334-44d6-9350-1cb2748da8d8';
-const TENANT_ID = 'common';
+const TENANT_ID = 'ffe86e1f-70b6-4c17-b2db-416509cdb0c1';
 const REDIRECT_URL = 'com.falconmobile://auth/';
 
 const SCOPES = [
   'openid', 'profile', 'offline_access',
   'User.Read', 'User.Read.All',
   'Presence.Read', 'Presence.Read.All',
-  'ChatMessage.Send', 'Chat.ReadWrite',
   'Calendars.Read',
 ];
 

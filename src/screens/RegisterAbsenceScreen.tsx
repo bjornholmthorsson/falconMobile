@@ -16,7 +16,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import { getAbsenceTypes, registerAbsence } from '../services/api';
-import { sendAbsenceNotification } from '../services/graphService';
 import { useAppStore } from '../store/appStore';
 import type { Absence } from '../models';
 
@@ -263,20 +262,7 @@ export default function RegisterAbsenceScreen() {
         comment,
       });
 
-      let notified = true;
-      try {
-        await sendAbsenceNotification(selectedType.absenceKey, fromDate, toDate, comment, currentUser.id);
-      } catch (e: any) {
-        console.warn('Teams notification failed:', e?.message);
-        notified = false;
-      }
-
-      Alert.alert(
-        'Submitted',
-        notified
-          ? 'Absence has been registered and supervisor notified.'
-          : 'Absence registered. (Supervisor notification could not be sent.)',
-      );
+      Alert.alert('Submitted', 'Absence has been registered.');
       setSelectedType(null);
       setDateStart(null);
       setDateEnd(null);
