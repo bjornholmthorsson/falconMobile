@@ -180,6 +180,12 @@ export default function HomeScreen() {
     setIsAuthenticated(false);
   }
 
+  const isAuthError = isError && (error as any)?.message === 'Not authenticated';
+
+  useEffect(() => {
+    if (isAuthError) handleSignOut();
+  }, [isAuthError]);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -189,17 +195,12 @@ export default function HomeScreen() {
   }
 
   if (isError) {
-    const isAuthError = (error as any)?.message === 'Not authenticated';
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>
-          {isAuthError ? 'Session expired.' : 'Could not load office data.'}
+          {isAuthError ? 'Session expired — signing you out…' : 'Could not load office data.'}
         </Text>
-        {isAuthError ? (
-          <TouchableOpacity style={styles.retryBtn} onPress={handleSignOut}>
-            <Text style={styles.retryBtnText}>Sign in again</Text>
-          </TouchableOpacity>
-        ) : (
+        {!isAuthError && (
           <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
             <Text style={styles.retryBtnText}>Retry</Text>
           </TouchableOpacity>

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUserPhoto } from '../services/graphService';
+import { getUserPhoto, getPresenceForUser } from '../services/graphService';
 import {
   getUserInformation,
   getUserSettings,
@@ -26,9 +26,10 @@ import {
   deleteLocationSubscription,
 } from '../services/api';
 import { useAppStore } from '../store/appStore';
-import type { Employee, UserData, KnownLocation, LocationSubscription } from '../models';
+import type { Employee, UserData, KnownLocation, LocationSubscription, TeamsPresence } from '../models';
 
 const SLACK_TEAM_ID = 'TD8GE7QFQ';
+const PRESENCE_POLL_MS = 15_000;
 
 type Props = {
   employee: Employee | null;
@@ -39,6 +40,28 @@ type Props = {
 export default function EmployeeDetailScreen({ employee, visible, onClose }: Props) {
   const currentUser = useAppStore(s => s.currentUser);
   const queryClient = useQueryClient();
+
+  const { data: livePresence } = useQuery<TeamsPresence>({
+    queryKey: ['presence', employee?.userId],
+    queryFn: () => getPresenceForUser(employee!.userId),
+    enabled: !!employee && visible,
+    staleTime: 10_000,
+    refetchInterval: visible ? PRESENCE_POLL_MS : false,
+  });
+
+  const availability = livePresence?.availability ?? employee?.teamsAvailability ?? 'Offline';
+
+  React.useEffect(() => {
+    if (!livePresence || !employee) return;
+    queryClient.setQueryData<Employee[]>(['employees', 'all'], old => {
+      if (!old) return old;
+      return old.map(e =>
+        e.userId === employee.userId
+          ? { ...e, teamsAvailability: livePresence.availability, teamsActivity: livePresence.activity }
+          : e,
+      );
+    });
+  }, [livePresence, employee, queryClient]);
 
   const { data: photo } = useQuery({
     queryKey: ['photo', employee?.userId],
@@ -168,8 +191,8 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
             <Text style={styles.name}>{employee.name}</Text>
             {employee.title && <Text style={styles.title}>{employee.title}</Text>}
             <View style={styles.statusRow}>
-              <PresenceDot availability={employee.teamsAvailability} />
-              <Text style={styles.statusText}>{employee.teamsAvailability}</Text>
+              <PresenceDot availability={availability} />
+              <Text style={styles.statusText}>{presenceLabel(availability)}</Text>
             </View>
           </View>
         </View>
@@ -328,6 +351,19 @@ function presenceColor(availability: string): string {
     case 'BusyIdle':
     case 'DoNotDisturb': return '#ef4444';
     default: return '#9ca3af';
+  }
+}
+
+function presenceLabel(availability: string): string {
+  switch (availability) {
+    case 'Available':
+    case 'AvailableIdle': return 'Available';
+    case 'Away':
+    case 'BeRightBack': return 'Away';
+    case 'Busy':
+    case 'BusyIdle': return 'Busy';
+    case 'DoNotDisturb': return 'Do Not Disturb';
+    default: return 'Offline';
   }
 }
 

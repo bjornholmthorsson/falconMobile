@@ -56,12 +56,17 @@ export function getDepartmentOffices(department: string): string[] {
 const GRAPH_USER_FIELDS =
   'id,displayName,mobilePhone,businessPhones,mail,jobTitle,department,accountEnabled,userPrincipalName,officeLocation';
 
+function handleAuthFailure(): never {
+  throw new Error('Not authenticated');
+}
+
 async function graphGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const token = await getAccessToken();
   const res = await fetch(`${GRAPH}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });
+  if (res.status === 401 || res.status === 403) return handleAuthFailure();
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
@@ -84,6 +89,7 @@ async function graphPost<T>(
     body: JSON.stringify(body),
     signal,
   });
+  if (res.status === 401 || res.status === 403) return handleAuthFailure();
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
@@ -106,6 +112,7 @@ async function graphPatch(
     body: JSON.stringify(body),
     signal,
   });
+  if (res.status === 401 || res.status === 403) return handleAuthFailure();
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(`Graph ${res.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);
@@ -146,6 +153,7 @@ export async function getCompanyUsers(signal?: AbortSignal): Promise<User[]> {
       },
       signal,
     });
+    if (pageRes.status === 401 || pageRes.status === 403) return handleAuthFailure();
     if (!pageRes.ok) {
       const detail = await pageRes.json().catch(() => ({}));
       throw new Error(`Graph ${pageRes.status}: ${detail?.error?.message ?? detail?.error?.code ?? JSON.stringify(detail)}`);

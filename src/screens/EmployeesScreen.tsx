@@ -1,7 +1,7 @@
 /**
  * EmployeesScreen — Company Directory with card-based layout.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,11 @@ import {
   Image,
   Linking,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   getUsersByDepartment,
   getPresenceForUsers,
@@ -26,7 +28,7 @@ import { getUserAbsences, getUserLocations, getUserData } from '../services/api'
 import { useAppStore } from '../store/appStore';
 import type { Employee, User, TeamsPresence, UserAbsence, UserLocation, UserData } from '../models';
 
-const REFRESH_INTERVAL_MS = 60_000;
+const REFRESH_INTERVAL_MS = 30_000;
 
 type Props = {
   onSelectEmployee: (employee: Employee) => void;
@@ -36,6 +38,7 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
   const [search, setSearch] = useState('');
   const officeFilter = useAppStore(s => s.teamOfficeFilter);
   const setOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
+  const queryClient = useQueryClient();
 
   function toggleOffice(office: string) {
     if (officeFilter.includes(office)) {
@@ -48,12 +51,32 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
   const { data: employees, refetch, isLoading, isRefetching } = useQuery<Employee[]>({
     queryKey: ['employees', 'all'],
     queryFn: fetchAllEmployees,
-    staleTime: 30_000,
+    staleTime: 10_000,
   });
+
+  useEffect(() => {
+    if (!employees) return;
+    for (const e of employees) {
+      queryClient.setQueryData(['presence', e.userId], {
+        id: e.userId,
+        availability: e.teamsAvailability,
+        activity: e.teamsActivity ?? '',
+      });
+    }
+  }, [employees, queryClient]);
+
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   useEffect(() => {
     const id = setInterval(refetch, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
+  }, [refetch]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
   }, [refetch]);
 
   const filtered = useMemo(() => {
@@ -91,6 +114,7 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
           <EmployeeCard employee={item} onPress={() => onSelectEmployee(item)} />
         )}
         contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor="#006559" />}
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.headingRow}>
@@ -285,7 +309,7 @@ function statusStyle(availability: string): {
       return { label: 'AWAY', dot: '#f97316', badge: 'rgba(249,115,22,0.12)' };
     case 'Busy':
     case 'BusyIdle':
-      return { label: 'IN A MEETING', dot: '#ef4444', badge: 'rgba(239,68,68,0.12)' };
+      return { label: 'BUSY', dot: '#ef4444', badge: 'rgba(239,68,68,0.12)' };
     case 'DoNotDisturb':
       return { label: 'DO NOT DISTURB', dot: '#ef4444', badge: 'rgba(239,68,68,0.12)' };
     default:
@@ -336,7 +360,7 @@ async function fetchAllEmployees(): Promise<Employee[]> {
       userId: u.id,
       name: u.displayName,
       title: u.jobTitle,
-      mobilePhone: u.mobilePhone,
+      mobilePhone: u.mobilePhone || u.businessPhone || ud?.mobile || null,
       userPrincipalName: u.userPrincipalName ?? null,
       location: u.officeLocation ?? office,
       office,
