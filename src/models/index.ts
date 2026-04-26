@@ -103,6 +103,7 @@ export interface UserData {
   jiraUsername: string | null;
   secondCalendarEmail: string | null;
   displayName: string | null;
+  officeLocation: string | null;
 }
 
 export interface TeamsPresence {

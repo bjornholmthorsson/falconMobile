@@ -212,6 +212,9 @@ export default function EmployeeDetailScreen({ employee, visible, onClose }: Pro
           {userData?.role && (
             <DetailRow label="Role" value={userData.role} />
           )}
+          {userData?.officeLocation && (
+            <DetailRow label="Office" value={userData.officeLocation} />
+          )}
           {(userData?.street || userData?.postalCode) && (
             <DetailRow label="Home Address" value={[userData.street, userData.postalCode].filter(Boolean).join(' ')} />
           )}

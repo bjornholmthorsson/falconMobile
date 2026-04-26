@@ -2,9 +2,41 @@ import React, { useCallback, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, ImageBackground, StyleSheet } from 'react-native';
 import { useAppStore } from '../store/appStore';
 import { HomeIcon, EmployeesIcon, LocationIcon, ProfileIcon, LunchIcon, TimeIcon, OtherIcon } from '../components/TabIcons';
+
+const HEADER_IMAGE = require('../assets/images/header-clouds.png');
+
+function HeaderBackground() {
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <ImageBackground
+        source={HEADER_IMAGE}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      {/* Glossy highlight at the bottom edge — sells the "image is behind" depth cue */}
+      <View style={headerStyles.glossLine} />
+      <View style={headerStyles.glossSoft} />
+    </View>
+  );
+}
+
+const headerStyles = StyleSheet.create({
+  glossLine: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    height: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  glossSoft: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 1.5,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+});
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -52,9 +84,17 @@ function MainTabs() {
         tabBarActiveTintColor: '#006559',
         tabBarInactiveTintColor: '#9ca3af',
         headerShown: true,
-        headerStyle: { backgroundColor: '#006E61' },
+        headerBackground: () => <HeaderBackground />,
         headerTintColor: '#ffffff',
         headerTitleStyle: { fontWeight: '700' },
+        headerShadowVisible: true,
+        headerStyle: {
+          shadowColor: '#000',
+          shadowOpacity: 0.18,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 5,
+        },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

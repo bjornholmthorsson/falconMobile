@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { getMe, updateUser, getUserPhoto } from '../services/graphService';
+import { getUserPhoto } from '../services/graphService';
 import {
   getUserData, registerUserData, updateUserSettings, getUserSettings,
   getWorklogKeywordRules, addWorklogKeywordRule, deleteWorklogKeywordRule,
@@ -68,12 +68,23 @@ export default function ProfileScreen() {
     }
   }
 
-  const [editMobileOpen, setEditMobileOpen] = useState(false);
-  const [mobile, setMobile] = useState(currentUser?.mobilePhone ?? '');
   const [editSlackOpen, setEditSlackOpen] = useState(false);
   const [slackId, setSlackId] = useState('');
   const [editJiraOpen, setEditJiraOpen] = useState(false);
   const [jiraUsername, setJiraUsername] = useState('');
+
+  // ── Personal Information form ──
+  const [personalOpen, setPersonalOpen] = useState(false);
+  const [pDisplayName, setPDisplayName] = useState('');
+  const [pMobile, setPMobile]           = useState('');
+  const [pSpouse, setPSpouse]           = useState('');
+  const [pStreet, setPStreet]           = useState('');
+  const [pPostalCode, setPPostalCode]   = useState('');
+  const [pCity, setPCity]               = useState('');
+  const [pSsn, setPSsn]                 = useState('');
+  const [pEducation, setPEducation]     = useState('');
+  const [pRole, setPRole]               = useState('');
+  const [pStartDate, setPStartDate]     = useState('');
   const [cal2Email, setCal2Email]       = useState<string | null>(null);
   const [cal2Loading, setCal2Loading]   = useState(false);
 
@@ -173,17 +184,40 @@ export default function ProfileScreen() {
     }
   }
 
-  async function handleSaveMobile() {
+  function openPersonal() {
+    const u = userData?.[0];
+    setPDisplayName(u?.displayName ?? currentUser?.displayName ?? '');
+    setPMobile(u?.mobile ?? currentUser?.mobilePhone ?? '');
+    setPSpouse(u?.spouse ?? '');
+    setPStreet(u?.street ?? '');
+    setPPostalCode(u?.postalCode ?? '');
+    setPCity(u?.city ?? '');
+    setPSsn(u?.ssn ?? '');
+    setPEducation(u?.education ?? '');
+    setPRole(u?.role ?? '');
+    setPStartDate(u?.startDate ?? '');
+    setPersonalOpen(true);
+  }
+
+  async function handleSavePersonal() {
     if (!currentUser) return;
     setSaving(true);
     try {
-      await updateUser(currentUser.id, mobile);
-      await registerUserData(currentUser.id, { mobile });
-      const updated = await getMe();
-      setCurrentUser(updated);
+      await registerUserData(currentUser.id, {
+        displayName: pDisplayName.trim() || null,
+        mobile:      pMobile.trim()      || null,
+        spouse:      pSpouse.trim()      || null,
+        street:      pStreet.trim()      || null,
+        postalCode:  pPostalCode.trim()  || null,
+        city:        pCity.trim()        || null,
+        ssn:         pSsn.trim()         || null,
+        education:   pEducation.trim()   || null,
+        role:        pRole.trim()        || null,
+        startDate:   pStartDate.trim()   || null,
+      });
       qc.invalidateQueries({ queryKey: ['userData'] });
-      setEditMobileOpen(false);
-      Alert.alert('Saved', 'Mobile number updated.');
+      setPersonalOpen(false);
+      Alert.alert('Saved', 'Personal information updated.');
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Update failed');
     } finally {
@@ -274,14 +308,14 @@ export default function ProfileScreen() {
       {/* ── Account Settings ── */}
       <Text style={styles.sectionHeader}>Account Settings</Text>
       <View style={styles.settingsCard}>
-        <TouchableOpacity style={styles.settingsRow} onPress={() => setEditMobileOpen(true)} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.settingsRow} onPress={openPersonal} activeOpacity={0.7}>
           <View style={styles.settingsRowLeft}>
             <View style={styles.settingsIcon}>
               <Icon name="account-outline" size={20} color="#006559" />
             </View>
             <View>
               <Text style={styles.settingsRowTitle}>Personal Information</Text>
-              <Text style={styles.settingsRowSub}>Update your mobile number</Text>
+              <Text style={styles.settingsRowSub}>Address, role, education, contact details…</Text>
             </View>
           </View>
           <Icon name="chevron-right" size={20} color="#9ca3af" />
@@ -577,35 +611,58 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* ── Edit Mobile Modal ── */}
-      <Modal visible={editMobileOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setEditMobileOpen(false)}>
-                <Text style={styles.modalCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Mobile Number</Text>
-              <TouchableOpacity onPress={handleSaveMobile}>
-                {saving
-                  ? <ActivityIndicator color="#006559" />
-                  : <Text style={styles.modalDone}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.mobileInput}
-              value={mobile}
-              onChangeText={setMobile}
-              placeholder="+354 xxx xxxx"
-              keyboardType="phone-pad"
-              autoFocus
-            />
+      {/* ── Personal Information Modal ── */}
+      <Modal visible={personalOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPersonalOpen(false)}>
+        <View style={styles.personalContainer}>
+          <View style={styles.personalHeader}>
+            <TouchableOpacity onPress={() => setPersonalOpen(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Personal Information</Text>
+            <TouchableOpacity onPress={handleSavePersonal} disabled={saving}>
+              {saving ? <ActivityIndicator color="#006559" /> : <Text style={styles.modalDone}>Save</Text>}
+            </TouchableOpacity>
           </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+            <PersonalField label="Display Name"  value={pDisplayName} onChange={setPDisplayName} />
+            <PersonalField label="Mobile"        value={pMobile}      onChange={setPMobile} keyboardType="phone-pad" placeholder="+354 xxx xxxx" />
+            <PersonalField label="Spouse"        value={pSpouse}      onChange={setPSpouse} />
+            <PersonalField label="Street"        value={pStreet}      onChange={setPStreet} />
+            <PersonalField label="Postal Code"   value={pPostalCode}  onChange={setPPostalCode} keyboardType="number-pad" />
+            <PersonalField label="City"          value={pCity}        onChange={setPCity} />
+            <PersonalField label="SSN"           value={pSsn}         onChange={setPSsn} />
+            <PersonalField label="Education"     value={pEducation}   onChange={setPEducation} />
+            <PersonalField label="Role"          value={pRole}        onChange={setPRole} />
+            <PersonalField label="Start Date"    value={pStartDate}   onChange={setPStartDate} placeholder="YYYY-MM-DD" />
+          </ScrollView>
         </View>
       </Modal>
 
       <AdminTokenScreen visible={adminOpen} onClose={() => setAdminOpen(false)} />
     </ScrollView>
+  );
+}
+
+function PersonalField({ label, value, onChange, keyboardType, placeholder }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  keyboardType?: 'default' | 'phone-pad' | 'number-pad' | 'email-address';
+  placeholder?: string;
+}) {
+  return (
+    <View style={styles.personalField}>
+      <Text style={styles.personalLabel}>{label}</Text>
+      <TextInput
+        style={styles.personalInput}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={keyboardType ?? 'default'}
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+        autoCorrect={false}
+      />
+    </View>
   );
 }
 
@@ -690,5 +747,22 @@ const styles = StyleSheet.create({
   mobileInput: {
     margin: 20, borderWidth: 1, borderColor: '#e5e7eb',
     borderRadius: 10, padding: 14, fontSize: 16,
+  },
+
+  // Personal Information modal
+  personalContainer: { flex: 1, backgroundColor: '#C7D3D3' },
+  personalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
+  },
+  personalField: { marginBottom: 12 },
+  personalLabel: {
+    fontSize: 11, fontWeight: '700', color: '#6b7280',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginLeft: 4,
+  },
+  personalInput: {
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb',
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#111',
   },
 });
