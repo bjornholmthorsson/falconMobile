@@ -234,7 +234,6 @@ export default function HomeScreen() {
         </View>
       )}
       <View style={styles.headerRow}>
-        {isRefetching && <ActivityIndicator size="small" color="#1e1b14" />}
         {!checkinEnabled && (
           <View style={styles.checkinBadge}>
             <Icon name="map-marker-off-outline" size={13} color="#b45309" />
