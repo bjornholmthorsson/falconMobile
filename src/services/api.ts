@@ -504,6 +504,27 @@ export interface MyTravelRequest {
   returnDate: string | null;
 }
 
+export interface TravelRequestDetail {
+  key: string;
+  summary: string;
+  description: string | null;
+  status: string;
+  created: string | null;
+  reporter: string | null;
+  destination: string | null;
+  departureDate: string | null;
+  returnDate: string | null;
+  departurePreference: string | null;
+  returnPreference: string | null;
+  passengers: string[];
+  flightInformation: string | null;
+  hotelNeeded: string | null;
+  billable: string | null;
+  costCenter: string | null;
+  customer: string | null;
+  account: string | null;
+}
+
 export interface JiraUser {
   name: string;
   displayName: string;
@@ -541,6 +562,16 @@ export async function getMyTravelRequests(
 ): Promise<MyTravelRequest[]> {
   return apiGet<MyTravelRequest[]>(
     `/api/travel-request/mine?reporter=${encodeURIComponent(reporter)}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function getTravelRequestDetail(
+  key: string,
+  signal?: AbortSignal,
+): Promise<TravelRequestDetail> {
+  return apiGet<TravelRequestDetail>(
+    `/api/travel-request/detail/${encodeURIComponent(key)}?code=${CODE}`,
     signal,
   );
 }

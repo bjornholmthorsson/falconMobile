@@ -15,8 +15,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/appStore';
-import { createTravelRequest, searchJiraUsers, searchTempoAccounts, getMyTravelRequests, getUserData } from '../services/api';
-import type { JiraUser, TempoAccount, MyTravelRequest } from '../services/api';
+import { createTravelRequest, searchJiraUsers, searchTempoAccounts, getMyTravelRequests, getTravelRequestDetail, getUserData } from '../services/api';
+import type { JiraUser, TempoAccount, MyTravelRequest, TravelRequestDetail } from '../services/api';
 
 // ── Option lists (from Jira createmeta) ──────────────────────────────────────
 
@@ -66,6 +66,10 @@ function formatDate(d: Date): string {
 function formatDisplayDate(d: Date): string {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+function isClosedStatus(status: string): boolean {
+  return /^(done|cancelled|canceled)$/i.test(status.trim());
 }
 
 // ── DateField ────────────────────────────────────────────────────────────────
@@ -623,6 +627,18 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<'new' | 'mine'>('new');
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+
+  const {
+    data: detail,
+    isFetching: detailFetching,
+    isError: detailError,
+    error: detailErrorObj,
+  } = useQuery<TravelRequestDetail>({
+    queryKey: ['travelRequestDetail', detailKey],
+    queryFn: () => getTravelRequestDetail(detailKey!),
+    enabled: !!detailKey,
+  });
 
   const { data: userData } = useQuery({
     queryKey: ['userData', currentUser?.id],
@@ -774,43 +790,69 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
                 <Text style={styles.emptyTitle}>No travel requests yet</Text>
                 <Text style={styles.emptyText}>Submit a new request from the New Request tab.</Text>
               </View>
-            ) : (
-              myRequests.map(r => (
-                <View key={r.key} style={styles.requestCard}>
-                  <View style={styles.requestRow}>
-                    <Text style={styles.requestKey}>{r.key}</Text>
-                    {!!r.status && (
-                      <View style={styles.statusPill}>
-                        <Text style={styles.statusText}>{r.status}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.requestSummary}>{r.summary}</Text>
-                  {(r.destination || r.departureDate || r.returnDate) && (
-                    <View style={styles.requestMeta}>
-                      {!!r.destination && (
-                        <View style={styles.metaItem}>
-                          <Icon name="map-marker-outline" size={14} color="#6b7280" />
-                          <Text style={styles.metaText}>{r.destination}</Text>
-                        </View>
-                      )}
-                      {!!r.departureDate && (
-                        <View style={styles.metaItem}>
-                          <Icon name="airplane-takeoff" size={14} color="#6b7280" />
-                          <Text style={styles.metaText}>{r.departureDate}</Text>
-                        </View>
-                      )}
-                      {!!r.returnDate && (
-                        <View style={styles.metaItem}>
-                          <Icon name="airplane-landing" size={14} color="#6b7280" />
-                          <Text style={styles.metaText}>{r.returnDate}</Text>
+            ) : (() => {
+              const open = myRequests.filter(r => !isClosedStatus(r.status));
+              const closed = myRequests.filter(r => isClosedStatus(r.status));
+              const renderCard = (r: MyTravelRequest, muted: boolean) => {
+                const metaColor = muted ? '#9ca3af' : '#6b7280';
+                return (
+                  <TouchableOpacity
+                    key={r.key}
+                    style={[styles.requestCard, muted && styles.requestCardMuted]}
+                    activeOpacity={0.7}
+                    onPress={() => setDetailKey(r.key)}
+                  >
+                    <View style={styles.requestRow}>
+                      <Text style={[styles.requestKey, muted && styles.requestKeyMuted]}>{r.key}</Text>
+                      {!!r.status && (
+                        <View style={[styles.statusPill, muted && styles.statusPillMuted]}>
+                          <Text style={[styles.statusText, muted && styles.statusTextMuted]}>{r.status}</Text>
                         </View>
                       )}
                     </View>
+                    <Text style={[styles.requestSummary, muted && styles.requestSummaryMuted]}>{r.summary}</Text>
+                    {(r.destination || r.departureDate || r.returnDate) && (
+                      <View style={styles.requestMeta}>
+                        {!!r.destination && (
+                          <View style={styles.metaItem}>
+                            <Icon name="map-marker-outline" size={14} color={metaColor} />
+                            <Text style={[styles.metaText, muted && styles.metaTextMuted]}>{r.destination}</Text>
+                          </View>
+                        )}
+                        {!!r.departureDate && (
+                          <View style={styles.metaItem}>
+                            <Icon name="airplane-takeoff" size={14} color={metaColor} />
+                            <Text style={[styles.metaText, muted && styles.metaTextMuted]}>{r.departureDate}</Text>
+                          </View>
+                        )}
+                        {!!r.returnDate && (
+                          <View style={styles.metaItem}>
+                            <Icon name="airplane-landing" size={14} color={metaColor} />
+                            <Text style={[styles.metaText, muted && styles.metaTextMuted]}>{r.returnDate}</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              };
+              return (
+                <>
+                  {open.length > 0 && (
+                    <>
+                      <Text style={styles.sectionHeader}>Open</Text>
+                      {open.map(r => renderCard(r, false))}
+                    </>
                   )}
-                </View>
-              ))
-            )}
+                  {closed.length > 0 && (
+                    <>
+                      <Text style={[styles.sectionHeader, styles.sectionHeaderMuted]}>Closed</Text>
+                      {closed.map(r => renderCard(r, true))}
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </ScrollView>
         ) : (
         <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -947,8 +989,79 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
           )}
         </ScrollView>
         )}
+
+        {/* Detail (read-only) modal */}
+        <Modal
+          visible={!!detailKey}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setDetailKey(null)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => setDetailKey(null)} style={styles.closeBtn}>
+                <Icon name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>{detailKey ?? 'Travel Request'}</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            {detailFetching && !detail ? (
+              <ActivityIndicator size="large" color="#006559" style={{ marginTop: 32 }} />
+            ) : detailError ? (
+              <View style={styles.emptyCard}>
+                <Icon name="alert-circle-outline" size={36} color="#ef4444" />
+                <Text style={styles.emptyTitle}>Could not load request</Text>
+                <Text style={styles.emptyText}>{(detailErrorObj as Error)?.message ?? 'Please try again.'}</Text>
+              </View>
+            ) : detail ? (
+              <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+                <View style={styles.detailHeaderCard}>
+                  <Text style={styles.detailSummary}>{detail.summary}</Text>
+                  {!!detail.status && (
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusText}>{detail.status}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <ReadOnlyField label="Destination" value={detail.destination} />
+                <ReadOnlyField label="Departure date" value={detail.departureDate} />
+                <ReadOnlyField label="Return date" value={detail.returnDate} />
+                <ReadOnlyField label="Departure preference" value={detail.departurePreference} />
+                <ReadOnlyField label="Return preference" value={detail.returnPreference} />
+                <ReadOnlyField
+                  label="Passengers"
+                  value={detail.passengers.length ? detail.passengers.join(', ') : null}
+                />
+                <ReadOnlyField label="Flight information" value={detail.flightInformation} multiline />
+                <ReadOnlyField label="Hotel needed" value={detail.hotelNeeded} />
+                <ReadOnlyField label="Billable" value={detail.billable} />
+                <ReadOnlyField label="Cost center" value={detail.costCenter} />
+                <ReadOnlyField label="Customer" value={detail.customer} />
+                <ReadOnlyField label="Account" value={detail.account} />
+                <ReadOnlyField label="Description" value={detail.description} multiline />
+                <ReadOnlyField label="Reporter" value={detail.reporter} />
+                <ReadOnlyField label="Created" value={detail.created ? new Date(detail.created).toLocaleString() : null} />
+              </ScrollView>
+            ) : null}
+          </View>
+        </Modal>
       </View>
     </Modal>
+  );
+}
+
+function ReadOnlyField({ label, value, multiline }: { label: string; value: string | null | undefined; multiline?: boolean }) {
+  return (
+    <View style={styles.detailField}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text
+        style={[styles.detailValue, !value && styles.detailValueEmpty, multiline && styles.detailValueMultiline]}
+      >
+        {value || '—'}
+      </Text>
+    </View>
   );
 }
 
@@ -1024,4 +1137,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 3,
   },
   statusText: { fontSize: 11, fontWeight: '700', color: '#006559', letterSpacing: 0.3 },
+  sectionHeader: {
+    fontSize: 13, fontWeight: '700', color: '#374151',
+    textTransform: 'uppercase', letterSpacing: 0.6,
+    marginTop: 8, marginBottom: 8, marginLeft: 4,
+  },
+  sectionHeaderMuted:   { color: '#9ca3af', marginTop: 16 },
+  requestCardMuted:     { backgroundColor: '#f3f4f6' },
+  requestKeyMuted:      { color: '#9ca3af' },
+  requestSummaryMuted:  { color: '#6b7280' },
+  statusPillMuted:      { backgroundColor: '#e5e7eb' },
+  statusTextMuted:      { color: '#6b7280' },
+  metaTextMuted:        { color: '#9ca3af' },
+  detailHeaderCard: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  detailSummary: { flex: 1, fontSize: 16, fontWeight: '700', color: '#111' },
+  detailField: {
+    backgroundColor: '#fff', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8,
+  },
+  detailLabel: {
+    fontSize: 11, fontWeight: '700', color: '#9ca3af',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4,
+  },
+  detailValue:          { fontSize: 14, color: '#111' },
+  detailValueEmpty:     { color: '#9ca3af', fontStyle: 'italic' },
+  detailValueMultiline: { lineHeight: 20 },
 });
