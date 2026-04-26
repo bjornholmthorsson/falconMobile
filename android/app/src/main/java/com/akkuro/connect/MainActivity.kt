@@ -1,4 +1,4 @@
-package com.falconmobile
+package com.akkuro.connect
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

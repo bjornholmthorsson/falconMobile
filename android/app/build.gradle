@@ -77,13 +77,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.falconmobile"
+    namespace "com.akkuro.connect"
     defaultConfig {
-        applicationId "com.falconmobile"
+        applicationId "com.akkuro.connect"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 97
+        versionName "1.1.35"
         manifestPlaceholders = [appAuthRedirectScheme: "com.falconmobile"]
     }
     signingConfigs {
@@ -93,15 +93,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (project.hasProperty('AKKURO_CONNECT_UPLOAD_STORE_FILE')) {
+                storeFile     file(AKKURO_CONNECT_UPLOAD_STORE_FILE)
+                storePassword AKKURO_CONNECT_UPLOAD_STORE_PASSWORD
+                keyAlias      AKKURO_CONNECT_UPLOAD_KEY_ALIAS
+                keyPassword   AKKURO_CONNECT_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig project.hasProperty('AKKURO_CONNECT_UPLOAD_STORE_FILE')
+                ? signingConfigs.release
+                : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

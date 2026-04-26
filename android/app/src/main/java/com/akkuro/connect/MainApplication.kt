@@ -1,4 +1,4 @@
-package com.falconmobile
+package com.akkuro.connect
 
 import android.app.Application
 import com.facebook.react.PackageList
