@@ -71,9 +71,9 @@ export default function ProfileScreen() {
   const [editMobileOpen, setEditMobileOpen] = useState(false);
   const [mobile, setMobile] = useState(currentUser?.mobilePhone ?? '');
   const [editSlackOpen, setEditSlackOpen] = useState(false);
-  const [slackId, setSlackId] = useState(ud?.slackMemberId ?? '');
+  const [slackId, setSlackId] = useState('');
   const [editJiraOpen, setEditJiraOpen] = useState(false);
-  const [jiraUsername, setJiraUsername] = useState(ud?.jiraUsername ?? '');
+  const [jiraUsername, setJiraUsername] = useState('');
   const [cal2Email, setCal2Email]       = useState<string | null>(null);
   const [cal2Loading, setCal2Loading]   = useState(false);
 

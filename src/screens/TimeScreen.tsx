@@ -150,6 +150,9 @@ type ModalType = 'worklog' | 'absence' | null;
 
 export default function TimeScreen() {
   const currentUser = useAppStore(s => s.currentUser);
+  const jiraFavorites = useAppStore(s => s.jiraFavorites);
+  const addJiraFavorite = useAppStore(s => s.addJiraFavorite);
+  const removeJiraFavorite = useAppStore(s => s.removeJiraFavorite);
   const queryClient = useQueryClient();
 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr());
@@ -330,6 +333,15 @@ export default function TimeScreen() {
     }
   }
 
+  const isIssueFavorited = jiraFavorites.some(f => f.key === issueKey.trim().toUpperCase());
+
+  function toggleIssueFavorite() {
+    const k = issueKey.trim().toUpperCase();
+    if (!k) return;
+    if (isIssueFavorited) removeJiraFavorite(k);
+    else addJiraFavorite({ key: k, summary: issueSummary });
+  }
+
   function onIssueQueryChange(text: string) {
     setIssueKey(text);
     setIssueSummary('');
@@ -505,14 +517,60 @@ export default function TimeScreen() {
             </View>
 
             <Text style={styles.fieldLabel}>Jira Issue *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. INT-5 or search by name"
-              placeholderTextColor="#aaa"
-              value={issueKey}
-              onChangeText={onIssueQueryChange}
-              autoCapitalize="characters"
-            />
+            {jiraFavorites.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.favStrip}
+                contentContainerStyle={{ gap: 8, paddingRight: 4 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {jiraFavorites.map(f => {
+                  const active = issueKey.trim().toUpperCase() === f.key;
+                  return (
+                    <TouchableOpacity
+                      key={f.key}
+                      style={[styles.favCard, active && styles.favCardActive]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setIssueKey(f.key);
+                        setIssueSummary(f.summary);
+                        setSuggestions([]);
+                      }}
+                    >
+                      <Text style={[styles.favCardKey, active && styles.favCardKeyActive]}>{f.key}</Text>
+                      {!!f.summary && (
+                        <Text style={[styles.favCardSummary, active && styles.favCardSummaryActive]} numberOfLines={1}>
+                          {f.summary}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <View style={styles.inputWithStar}>
+              <TextInput
+                style={styles.inputInner}
+                placeholder="e.g. INT-5 or search by name"
+                placeholderTextColor="#aaa"
+                value={issueKey}
+                onChangeText={onIssueQueryChange}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                onPress={toggleIssueFavorite}
+                disabled={!issueKey.trim()}
+                style={styles.starBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon
+                  name={isIssueFavorited ? 'star' : 'star-outline'}
+                  size={22}
+                  color={!issueKey.trim() ? '#cbd5e1' : isIssueFavorited ? '#f59e0b' : '#94a3b8'}
+                />
+              </TouchableOpacity>
+            </View>
             {searching && <ActivityIndicator size="small" color="#006559" style={{ marginBottom: 4 }} />}
             {suggestions.length > 0 && (
               <View style={styles.suggestionBox}>
@@ -696,6 +754,27 @@ const styles = StyleSheet.create({
     fontSize: 15, color: '#111', borderWidth: 1, borderColor: '#e5e5e5',
   },
   inputMultiline:   { minHeight: 80, textAlignVertical: 'top' },
+  inputWithStar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#fff', borderRadius: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1, borderColor: '#e5e5e5',
+  },
+  inputInner:  { flex: 1, fontSize: 15, color: '#111', paddingVertical: 12 },
+  starBtn:     { paddingVertical: 6, paddingLeft: 4 },
+  favStrip:    { marginTop: 4, marginBottom: 8 },
+  favCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#fff', borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#e5e5e5',
+    maxWidth: 220,
+  },
+  favCardActive:        { backgroundColor: '#006559', borderColor: '#006559' },
+  favCardKey:           { fontSize: 13, fontWeight: '700', color: '#006559' },
+  favCardKeyActive:     { color: '#fff' },
+  favCardSummary:       { fontSize: 12, color: '#555', flexShrink: 1 },
+  favCardSummaryActive: { color: '#e6f4f1' },
   suggestionBox:    { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e5e5', marginTop: 4, overflow: 'hidden' },
   suggestionRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', gap: 10 },
   suggestionKey:    { fontSize: 13, fontWeight: '700', color: '#006559', width: 60 },

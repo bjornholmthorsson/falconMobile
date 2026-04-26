@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/appStore';
-import { createTravelRequest, searchJiraUsers, searchTempoAccounts } from '../services/api';
-import type { JiraUser, TempoAccount } from '../services/api';
+import { createTravelRequest, searchJiraUsers, searchTempoAccounts, getMyTravelRequests, getUserData } from '../services/api';
+import type { JiraUser, TempoAccount, MyTravelRequest } from '../services/api';
 
 // ── Option lists (from Jira createmeta) ──────────────────────────────────────
 
@@ -619,6 +620,29 @@ interface Props {
 
 export default function TravelRequestScreen({ visible, onClose }: Props) {
   const currentUser = useAppStore(s => s.currentUser);
+  const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState<'new' | 'mine'>('new');
+
+  const { data: userData } = useQuery({
+    queryKey: ['userData', currentUser?.id],
+    queryFn: () => getUserData([currentUser!.id]),
+    enabled: !!currentUser,
+  });
+  const jiraUsername = userData?.[0]?.jiraUsername ?? null;
+
+  const {
+    data: myRequests = [],
+    isFetching: myRequestsFetching,
+    isError: myRequestsError,
+    error: myRequestsErrorObj,
+    refetch: refetchMyRequests,
+  } = useQuery<MyTravelRequest[]>({
+    queryKey: ['myTravelRequests', jiraUsername],
+    queryFn: () => getMyTravelRequests(jiraUsername!),
+    enabled: !!jiraUsername && activeTab === 'mine' && visible,
+    staleTime: 60 * 1000,
+  });
 
   const [summary, setSummary] = useState('');
   const [destination, setDestination] = useState('');
@@ -678,8 +702,10 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
         customer: customer || undefined,
         account: account ? String(account.id) : undefined,
         accountKey: account?.key || undefined,
+        reporter: jiraUsername || undefined,
       });
 
+      queryClient.invalidateQueries({ queryKey: ['myTravelRequests'] });
       Alert.alert('Submitted', 'Your travel request has been created in Jira.', [
         { text: 'OK', onPress: () => { resetForm(); onClose(); } },
       ]);
@@ -704,6 +730,89 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
           <View style={{ width: 40 }} />
         </View>
 
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'new' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('new')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabBtnText, activeTab === 'new' && styles.tabBtnTextActive]}>New Request</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'mine' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('mine')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabBtnText, activeTab === 'mine' && styles.tabBtnTextActive]}>My Requests</Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'mine' ? (
+          <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            {!jiraUsername ? (
+              <View style={styles.emptyCard}>
+                <Icon name="account-question-outline" size={36} color="#9ca3af" />
+                <Text style={styles.emptyTitle}>Set your Jira username</Text>
+                <Text style={styles.emptyText}>
+                  Open Profile → Jira Username and add yours to see travel requests in your name.
+                </Text>
+              </View>
+            ) : myRequestsFetching && myRequests.length === 0 ? (
+              <ActivityIndicator size="large" color="#006559" style={{ marginTop: 32 }} />
+            ) : myRequestsError ? (
+              <View style={styles.emptyCard}>
+                <Icon name="alert-circle-outline" size={36} color="#ef4444" />
+                <Text style={styles.emptyTitle}>Could not load requests</Text>
+                <Text style={styles.emptyText}>{(myRequestsErrorObj as Error)?.message ?? 'Please try again.'}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => refetchMyRequests()} activeOpacity={0.8}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : myRequests.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Icon name="airplane-off" size={36} color="#9ca3af" />
+                <Text style={styles.emptyTitle}>No travel requests yet</Text>
+                <Text style={styles.emptyText}>Submit a new request from the New Request tab.</Text>
+              </View>
+            ) : (
+              myRequests.map(r => (
+                <View key={r.key} style={styles.requestCard}>
+                  <View style={styles.requestRow}>
+                    <Text style={styles.requestKey}>{r.key}</Text>
+                    {!!r.status && (
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusText}>{r.status}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.requestSummary}>{r.summary}</Text>
+                  {(r.destination || r.departureDate || r.returnDate) && (
+                    <View style={styles.requestMeta}>
+                      {!!r.destination && (
+                        <View style={styles.metaItem}>
+                          <Icon name="map-marker-outline" size={14} color="#6b7280" />
+                          <Text style={styles.metaText}>{r.destination}</Text>
+                        </View>
+                      )}
+                      {!!r.departureDate && (
+                        <View style={styles.metaItem}>
+                          <Icon name="airplane-takeoff" size={14} color="#6b7280" />
+                          <Text style={styles.metaText}>{r.departureDate}</Text>
+                        </View>
+                      )}
+                      {!!r.returnDate && (
+                        <View style={styles.metaItem}>
+                          <Icon name="airplane-landing" size={14} color="#6b7280" />
+                          <Text style={styles.metaText}>{r.returnDate}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+          </ScrollView>
+        ) : (
         <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.subtitle}>
             Fill in the details below to submit a travel request. Fields marked with * are required.
@@ -837,6 +946,7 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
             </TouchableOpacity>
           )}
         </ScrollView>
+        )}
       </View>
     </Modal>
   );
@@ -875,4 +985,43 @@ const styles = StyleSheet.create({
   },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   loader: { marginVertical: 20 },
+  tabBar: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
+  },
+  tabBtn: {
+    flex: 1, paddingVertical: 14, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  tabBtnActive:    { borderBottomColor: '#006559' },
+  tabBtnText:      { fontSize: 14, fontWeight: '600', color: '#9ca3af' },
+  tabBtnTextActive:{ color: '#006559' },
+  emptyCard: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 24, marginTop: 24,
+    alignItems: 'center', gap: 8,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#111', marginTop: 4 },
+  emptyText:  { fontSize: 13, color: '#6b7280', textAlign: 'center', lineHeight: 18 },
+  retryBtn: {
+    marginTop: 12, backgroundColor: '#006559',
+    paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8,
+  },
+  retryBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  requestCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12,
+  },
+  requestRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  requestKey:     { fontSize: 13, fontWeight: '700', color: '#006559' },
+  requestSummary: { fontSize: 15, fontWeight: '600', color: '#111', marginBottom: 8 },
+  requestMeta:    { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  metaItem:       { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText:       { fontSize: 12, color: '#6b7280' },
+  statusPill: {
+    backgroundColor: '#e6f4f1', borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  statusText: { fontSize: 11, fontWeight: '700', color: '#006559', letterSpacing: 0.3 },
 });

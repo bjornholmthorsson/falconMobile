@@ -491,6 +491,17 @@ export interface TravelRequestPayload {
   customer?: string;
   account?: string;
   accountKey?: string;
+  reporter?: string;
+}
+
+export interface MyTravelRequest {
+  key: string;
+  summary: string;
+  status: string;
+  created: string | null;
+  destination: string | null;
+  departureDate: string | null;
+  returnDate: string | null;
 }
 
 export interface JiraUser {
@@ -520,6 +531,16 @@ export async function searchTempoAccounts(
 ): Promise<TempoAccount[]> {
   return apiGet<TempoAccount[]>(
     `/api/tempo/accounts?query=${encodeURIComponent(query)}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function getMyTravelRequests(
+  reporter: string,
+  signal?: AbortSignal,
+): Promise<MyTravelRequest[]> {
+  return apiGet<MyTravelRequest[]>(
+    `/api/travel-request/mine?reporter=${encodeURIComponent(reporter)}&code=${CODE}`,
     signal,
   );
 }
