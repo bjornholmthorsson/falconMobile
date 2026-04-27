@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
-  Switch,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Share from 'react-native-share';
@@ -76,13 +75,26 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
     enabled: visible,
   });
 
+  const summaryKey = ['lunchOrdersSummary', year, week, lang];
   const { mutate: toggleFrozen, isPending: togglingFrozen } = useMutation({
     mutationFn: (frozen: boolean) => setLunchWeekFrozen(year, week, frozen),
-    onSuccess: () => {
+    // Optimistic update: flip the icon immediately, revert on error.
+    onMutate: async (newFrozen: boolean) => {
+      await queryClient.cancelQueries({ queryKey: summaryKey });
+      const prev = queryClient.getQueryData<LunchOrdersSummary>(summaryKey);
+      if (prev) {
+        queryClient.setQueryData<LunchOrdersSummary>(summaryKey, { ...prev, frozen: newFrozen });
+      }
+      return { prev };
+    },
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(summaryKey, ctx.prev);
+      Alert.alert('Error', err.message ?? 'Could not change freeze state');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['lunchOrdersSummary', year, week] });
       queryClient.invalidateQueries({ queryKey: ['lunch-menu', year, week] });
     },
-    onError: (err: Error) => Alert.alert('Error', err.message ?? 'Could not change freeze state'),
   });
 
   function shiftWeek(delta: number) {
@@ -112,29 +124,16 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
       const filename = lunchOrdersXlsxFilename(data); // keeps .xlsx extension
       const subject = `Matarpöntun fyrir viku nr. ${data.week}`;
       const message = `Matarpöntun fyrir viku ${data.week} — sjá viðhengi.`;
-      const opts = {
+      // Show the system share sheet so the user can pick Outlook (if installed),
+      // Apple Mail, Gmail, Files, AirDrop, etc. iOS remembers the last choice.
+      await Share.open({
         subject,
         message,
         email: currentUser?.userPrincipalName,
         url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${b64}`,
         filename,
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      };
-      try {
-        // Launch the Mail composer directly (skips the system share sheet).
-        await Share.shareSingle({
-          ...opts,
-          social: Share.Social.EMAIL as any,
-        });
-      } catch (single: any) {
-        // Fallback: if no Mail account configured / not supported, fall back
-        // to the generic share sheet so the user can still pick Mail or AirDrop.
-        if (/no mail|MFMail|not available|not configured/i.test(String(single?.message ?? ''))) {
-          await Share.open(opts);
-        } else {
-          throw single;
-        }
-      }
+      });
     } catch (err: any) {
       const msg = String(err?.message ?? '');
       if (!/User did not share|cancel|dismiss/i.test(msg)) {
@@ -172,25 +171,41 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Freeze toggle (admin) */}
+        {/* Freeze toggle (admin) — tap the lock icon */}
         <View style={styles.freezeRow}>
           <View style={styles.freezeLeft}>
-            <Icon name={data?.frozen ? 'lock' : 'lock-open-variant-outline'} size={18} color={data?.frozen ? '#b45309' : '#6b7280'} />
-            <View style={{ marginLeft: 8 }}>
-              <Text style={styles.freezeTitle}>{data?.frozen ? 'Week is frozen' : 'Week is open'}</Text>
-              <Text style={styles.freezeSub}>{data?.frozen ? 'Users cannot change their orders' : 'Users can edit their orders'}</Text>
-            </View>
+            <Text style={[styles.freezeTitle, data?.frozen && { color: '#b91c1c' }]}>
+              {data?.frozen
+                ? (lang === 'is' ? 'Vikan er læst' : 'Week is frozen')
+                : (lang === 'is' ? 'Vikan er opin' : 'Week is open')}
+            </Text>
+            <Text style={styles.freezeSub}>
+              {data?.frozen
+                ? (lang === 'is' ? 'Pikkaðu á lásinn til að opna' : 'Tap the lock to unfreeze')
+                : (lang === 'is' ? 'Pikkaðu á lásinn til að læsa' : 'Tap the lock to freeze')}
+            </Text>
           </View>
-          {togglingFrozen
-            ? <ActivityIndicator size="small" color="#006559" />
-            : <Switch
-                value={!!data?.frozen}
-                onValueChange={v => toggleFrozen(v)}
-                disabled={!data || isFetching}
-                trackColor={{ false: '#d1d5db', true: '#b45309' }}
-                thumbColor="#fff"
+          <TouchableOpacity
+            onPress={() => toggleFrozen(!data?.frozen)}
+            disabled={!data || togglingFrozen}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={[
+              styles.lockBtn,
+              { backgroundColor: data?.frozen ? '#fee2e2' : '#e6f4f1' },
+              !data && { opacity: 0.5 },
+            ]}
+          >
+            {togglingFrozen ? (
+              <ActivityIndicator size="small" color={data?.frozen ? '#b91c1c' : '#006559'} />
+            ) : (
+              <Icon
+                name={data?.frozen ? 'lock' : 'lock-open-variant'}
+                size={26}
+                color={data?.frozen ? '#b91c1c' : '#006559'}
               />
-          }
+            )}
+          </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
@@ -314,9 +329,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
   },
-  freezeLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  freezeTitle: { fontSize: 14, fontWeight: '700', color: '#111' },
-  freezeSub:   { fontSize: 12, color: '#6b7280', marginTop: 1 },
+  freezeLeft: { flex: 1 },
+  freezeTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
+  freezeSub:   { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  lockBtn: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   body: { flex: 1 },
   bodyContent: { padding: 16, paddingBottom: 40 },
