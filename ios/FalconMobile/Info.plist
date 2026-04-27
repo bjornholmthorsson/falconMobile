@@ -39,6 +39,10 @@
 	<string>Akkuro Connect uses your location in the background to keep your status up to date.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Akkuro Connect uses your location to show colleagues where you are working from.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Akkuro Connect may request access to Photos when you share or save a file from the app.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Akkuro Connect may save shared files to your Photos when you choose Save Image while sharing.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
