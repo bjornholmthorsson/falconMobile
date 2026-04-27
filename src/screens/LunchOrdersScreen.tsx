@@ -109,21 +109,36 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
     if (!data?.days?.length) return;
     try {
       const b64 = generateLunchOrdersXlsxBase64(data);
-      const filename = lunchOrdersXlsxFilename(data);
+      const filename = lunchOrdersXlsxFilename(data); // keeps .xlsx extension
       const subject = `Matarpöntun fyrir viku nr. ${data.week}`;
       const message = `Matarpöntun fyrir viku ${data.week} — sjá viðhengi.`;
-      await Share.open({
-        title: subject,
+      const opts = {
         subject,
         message,
+        email: currentUser?.userPrincipalName,
         url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${b64}`,
-        filename: filename.replace(/\.xlsx$/, ''),
+        filename,
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
+      };
+      try {
+        // Launch the Mail composer directly (skips the system share sheet).
+        await Share.shareSingle({
+          ...opts,
+          social: Share.Social.EMAIL as any,
+        });
+      } catch (single: any) {
+        // Fallback: if no Mail account configured / not supported, fall back
+        // to the generic share sheet so the user can still pick Mail or AirDrop.
+        if (/no mail|MFMail|not available|not configured/i.test(String(single?.message ?? ''))) {
+          await Share.open(opts);
+        } else {
+          throw single;
+        }
+      }
     } catch (err: any) {
       const msg = String(err?.message ?? '');
-      if (!/User did not share|cancel/i.test(msg)) {
-        Alert.alert('Error', msg || 'Could not share file');
+      if (!/User did not share|cancel|dismiss/i.test(msg)) {
+        Alert.alert('Error', msg || 'Could not send email');
       }
     }
   }
