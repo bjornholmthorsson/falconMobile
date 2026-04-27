@@ -197,6 +197,7 @@ export interface LunchOrderSummaryDay {
 export interface LunchOrdersSummary {
   year: number;
   week: number;
+  frozen: boolean;
   totalOrders: number;
   days: LunchOrderSummaryDay[];
 }
@@ -211,6 +212,28 @@ export async function getLunchOrdersSummary(
     `/api/lunch-orders-summary?year=${year}&week=${week}&lang=${lang}&code=${CODE}`,
     signal,
   );
+}
+
+export async function setLunchWeekFrozen(
+  year: number,
+  week: number,
+  frozen: boolean,
+  signal?: AbortSignal,
+): Promise<{ id: number; frozen: boolean }> {
+  const res = await fetch(
+    `${BASE_URL}/api/lunch-weeks/${year}/${week}/freeze?code=${CODE}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frozen }),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body || `API ${res.status}`);
+  }
+  return res.json() as Promise<{ id: number; frozen: boolean }>;
 }
 
 // ── Absences ────────────────────────────────────────────────────────────────

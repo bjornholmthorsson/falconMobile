@@ -163,6 +163,7 @@ export interface LunchWeek {
   priceIsk: number | null;
   subsidyPct: number;
   dateLabel: string | null;
+  frozen: boolean;
   days: LunchDay[];
 }
 

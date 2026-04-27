@@ -7,13 +7,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  Linking,
+  Alert,
+  Switch,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useQuery } from '@tanstack/react-query';
-import { getLunchOrdersSummary } from '../services/api';
+import Share from 'react-native-share';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { getLunchOrdersSummary, setLunchWeekFrozen } from '../services/api';
 import type { LunchOrdersSummary } from '../services/api';
 import { useAppStore } from '../store/appStore';
+import { generateLunchOrdersXlsxBase64, lunchOrdersXlsxFilename } from '../utils/lunchOrdersXlsx';
 
 interface Props {
   visible: boolean;
@@ -65,11 +68,21 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
   const now = getISOWeek(new Date());
   const [year, setYear] = useState(now.year);
   const [week, setWeek] = useState(now.week);
+  const queryClient = useQueryClient();
 
   const { data, isFetching, error } = useQuery<LunchOrdersSummary>({
     queryKey: ['lunchOrdersSummary', year, week, lang],
     queryFn: () => getLunchOrdersSummary(year, week, lang),
     enabled: visible,
+  });
+
+  const { mutate: toggleFrozen, isPending: togglingFrozen } = useMutation({
+    mutationFn: (frozen: boolean) => setLunchWeekFrozen(year, week, frozen),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lunchOrdersSummary', year, week] });
+      queryClient.invalidateQueries({ queryKey: ['lunch-menu', year, week] });
+    },
+    onError: (err: Error) => Alert.alert('Error', err.message ?? 'Could not change freeze state'),
   });
 
   function shiftWeek(delta: number) {
@@ -92,49 +105,27 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
     return `${fmt(monday)} – ${fmt(friday)}`;
   }, [year, week]);
 
-  // Build email body with summary + per-day breakdown
-  const emailBody = useMemo(() => {
-    if (!data?.days?.length) return '';
-    const uniquePeople = new Set(data.days.flatMap(d => d.orders.map(o => o.userId))).size;
-    const dateLocale = lang === 'is' ? 'is-IS' : 'en-GB';
-
-    let body = `${strings.emailSubject} – Week ${data.week}, ${data.year}\n`;
-    body += `${weekRange}\n\n`;
-    body += `${strings.totalOrders}: ${data.totalOrders}  |  ${strings.days}: ${data.days.length}  |  ${strings.people}: ${uniquePeople}\n`;
-    body += '═'.repeat(50) + '\n\n';
-
-    for (const day of data.days) {
-      const dateStr = new Date(day.date + 'T12:00:00').toLocaleDateString(dateLocale, {
-        weekday: 'long', day: 'numeric', month: 'long',
+  async function handleEmail() {
+    if (!data?.days?.length) return;
+    try {
+      const b64 = generateLunchOrdersXlsxBase64(data);
+      const filename = lunchOrdersXlsxFilename(data);
+      const subject = `Matarpöntun fyrir viku nr. ${data.week}`;
+      const message = `Matarpöntun fyrir viku ${data.week} — sjá viðhengi.`;
+      await Share.open({
+        title: subject,
+        subject,
+        message,
+        url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${b64}`,
+        filename: filename.replace(/\.xlsx$/, ''),
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
-
-      // Category counts
-      const categoryCounts: Record<string, number> = {};
-      for (const o of day.orders) {
-        const label = o.categoryLabel || o.category;
-        categoryCounts[label] = (categoryCounts[label] ?? 0) + 1;
+    } catch (err: any) {
+      const msg = String(err?.message ?? '');
+      if (!/User did not share|cancel/i.test(msg)) {
+        Alert.alert('Error', msg || 'Could not share file');
       }
-      const summaryParts = Object.entries(categoryCounts).map(([cat, count]) => `${cat}: ${count}`);
-
-      body += `${dateStr} — ${day.orders.length} ${strings.orders}\n`;
-      body += `  ${summaryParts.join('  ·  ')}\n`;
-      body += '─'.repeat(50) + '\n';
-
-      // Pad names to align categories
-      const maxName = Math.max(...day.orders.map(o => o.displayName.length));
-      for (const order of day.orders) {
-        body += `  ${order.displayName.padEnd(maxName + 2)}${order.categoryLabel || order.category}\n`;
-      }
-      body += '\n';
     }
-    return body;
-  }, [data, weekRange, lang, strings]);
-
-  function handleEmail() {
-    if (!currentUser?.userPrincipalName) return;
-    const subject = encodeURIComponent(`${strings.emailSubject} - Week ${week}, ${year}`);
-    const body = encodeURIComponent(emailBody);
-    Linking.openURL(`mailto:${currentUser.userPrincipalName}?subject=${subject}&body=${body}`);
   }
 
   return (
@@ -164,6 +155,27 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
           <TouchableOpacity onPress={() => shiftWeek(1)} style={styles.navBtn}>
             <Text style={styles.navBtnText}>›</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Freeze toggle (admin) */}
+        <View style={styles.freezeRow}>
+          <View style={styles.freezeLeft}>
+            <Icon name={data?.frozen ? 'lock' : 'lock-open-variant-outline'} size={18} color={data?.frozen ? '#b45309' : '#6b7280'} />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={styles.freezeTitle}>{data?.frozen ? 'Week is frozen' : 'Week is open'}</Text>
+              <Text style={styles.freezeSub}>{data?.frozen ? 'Users cannot change their orders' : 'Users can edit their orders'}</Text>
+            </View>
+          </View>
+          {togglingFrozen
+            ? <ActivityIndicator size="small" color="#006559" />
+            : <Switch
+                value={!!data?.frozen}
+                onValueChange={v => toggleFrozen(v)}
+                disabled={!data || isFetching}
+                trackColor={{ false: '#d1d5db', true: '#b45309' }}
+                thumbColor="#fff"
+              />
+          }
         </View>
 
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
@@ -281,6 +293,15 @@ const styles = StyleSheet.create({
   weekLabel: { alignItems: 'center', minWidth: 100 },
   weekText: { fontSize: 18, fontWeight: '700', color: '#111' },
   yearText: { fontSize: 13, color: '#9ca3af' },
+
+  freezeRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
+  },
+  freezeLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  freezeTitle: { fontSize: 14, fontWeight: '700', color: '#111' },
+  freezeSub:   { fontSize: 12, color: '#6b7280', marginTop: 1 },
 
   body: { flex: 1 },
   bodyContent: { padding: 16, paddingBottom: 40 },

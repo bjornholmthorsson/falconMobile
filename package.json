@@ -1,6 +1,6 @@
 {
   "name": "AkkuroConnect",
-  "version": "1.1.35",
+  "version": "1.1.36",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -29,8 +29,10 @@
     "react-native-paper": "^5.15.0",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.24.0",
+    "react-native-share": "^12.2.6",
     "react-native-svg": "^15.15.4",
     "react-native-vector-icons": "^10.3.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

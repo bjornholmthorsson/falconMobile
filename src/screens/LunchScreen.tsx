@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -142,6 +143,15 @@ export default function LunchScreen() {
 
   async function toggleSelection(dayId: number, category: string) {
     if (!data || !userId) return;
+    if (data.frozen) {
+      Alert.alert(
+        lang === 'is' ? 'Vikan er læst' : 'Week is frozen',
+        lang === 'is'
+          ? 'Ekki er hægt að breyta pöntunum fyrir þessa viku.'
+          : 'Orders for this week can no longer be changed.',
+      );
+      return;
+    }
 
     // Compute next selections synchronously
     const next = { ...selections };
@@ -200,6 +210,15 @@ export default function LunchScreen() {
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
       </View>
+
+      {data?.frozen && (
+        <View style={styles.frozenBanner}>
+          <Icon name="lock" size={16} color="#b45309" />
+          <Text style={styles.frozenBannerText}>
+            {lang === 'is' ? 'Vikan er læst – ekki hægt að breyta pöntunum' : 'Week is frozen — orders are read-only'}
+          </Text>
+        </View>
+      )}
 
       {/* ── Language toggle ── */}
       <View style={styles.langRow}>
@@ -375,6 +394,15 @@ const styles = StyleSheet.create({
   restaurantLabel:    { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   weekLabel:          { fontSize: 17, fontWeight: '800', color: '#fff', textAlign: 'center' },
   weekNumber:         { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+
+  // Frozen banner
+  frozenBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: '#fef3c7',
+    borderBottomWidth: 1, borderBottomColor: '#fde68a',
+  },
+  frozenBannerText: { fontSize: 13, color: '#78350f', fontWeight: '600' },
 
   // Language toggle
   langRow: { alignItems: 'center', marginBottom: 4 },
