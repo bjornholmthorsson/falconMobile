@@ -19,7 +19,8 @@ import { getUserPhoto } from '../services/graphService';
 import {
   getUserData, registerUserData, updateUserSettings, getUserSettings,
   getWorklogKeywordRules, addWorklogKeywordRule, deleteWorklogKeywordRule,
-  type WorklogKeywordRule,
+  getNotificationPreferences, setNotificationPreferences,
+  type WorklogKeywordRule, type NotificationPreferences,
 } from '../services/api';
 import AdminTokenScreen from './AdminTokenScreen';
 import { signOut, signInSecondAccount, signOutSecondAccount, getSecondAccountEmail } from '../services/authService';
@@ -54,6 +55,25 @@ export default function ProfileScreen() {
   });
 
   const [savingCheckin, setSavingCheckin] = useState(false);
+
+  const { data: notifPrefs } = useQuery<NotificationPreferences>({
+    queryKey: ['notifPrefs', currentUser?.id],
+    queryFn:  () => getNotificationPreferences(currentUser!.id),
+    enabled:  !!currentUser,
+    staleTime: 5 * 60 * 1000,
+  });
+  const [savingAnnouncementsPref, setSavingAnnouncementsPref] = useState(false);
+  async function handleToggleAnnouncementsPref(value: boolean) {
+    if (!currentUser) return;
+    setSavingAnnouncementsPref(true);
+    qc.setQueryData<NotificationPreferences>(['notifPrefs', currentUser.id], { announcementsEnabled: value });
+    try { await setNotificationPreferences(currentUser.id, { announcementsEnabled: value }); }
+    catch (err: any) {
+      qc.setQueryData<NotificationPreferences>(['notifPrefs', currentUser.id], { announcementsEnabled: !value });
+      Alert.alert('Error', err?.message ?? 'Could not save preference');
+    }
+    finally { setSavingAnnouncementsPref(false); }
+  }
 
   async function handleToggleCheckin(value: boolean) {
     if (!currentUser) return;
@@ -469,10 +489,31 @@ export default function ProfileScreen() {
       )}
 
       {/* ── Notifications ── */}
-      {notifications.length > 0 && (
-        <>
-          <Text style={styles.sectionHeader}>Notifications</Text>
-          <View style={styles.settingsCard}>
+      <Text style={styles.sectionHeader}>Notifications</Text>
+      <View style={styles.settingsCard}>
+        <View style={styles.settingsRow}>
+          <View style={styles.settingsRowLeft}>
+            <View style={[styles.settingsIcon, { backgroundColor: '#fee2e2' }]}>
+              <Icon name="bullhorn-outline" size={20} color="#dc2626" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsRowTitle}>Announcements</Text>
+              <Text style={styles.settingsRowSub}>Get announcements that target your group</Text>
+            </View>
+          </View>
+          {savingAnnouncementsPref
+            ? <ActivityIndicator size="small" color="#dc2626" />
+            : <Switch
+                value={notifPrefs?.announcementsEnabled ?? false}
+                onValueChange={handleToggleAnnouncementsPref}
+                trackColor={{ false: '#d1d5db', true: '#dc2626' }}
+                thumbColor="#fff"
+              />
+          }
+        </View>
+        {notifications.length > 0 && (
+          <>
+            <View style={styles.settingsDivider} />
             <TouchableOpacity
               style={styles.settingsRow}
               onPress={() => { clearAllNotifications(); clearBadge(); }}
@@ -489,9 +530,9 @@ export default function ProfileScreen() {
               </View>
               <Icon name="chevron-right" size={20} color="#9ca3af" />
             </TouchableOpacity>
-          </View>
-        </>
-      )}
+          </>
+        )}
+      </View>
 
       {/* ── App Info ── */}
       <Text style={styles.sectionHeader}>App Info</Text>

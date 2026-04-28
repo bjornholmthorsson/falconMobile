@@ -104,6 +104,7 @@ export interface UserData {
   secondCalendarEmail: string | null;
   displayName: string | null;
   officeLocation: string | null;
+  department: string | null;
 }
 
 export interface TeamsPresence {

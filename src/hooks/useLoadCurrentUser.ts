@@ -57,7 +57,7 @@ export function useLoadCurrentUser() {
     getMe()
       .then(user => {
         setCurrentUser(user);
-        registerUserData(user.id, { displayName: user.displayName }).catch(() => {/* non-critical */});
+        registerUserData(user.id, { displayName: user.displayName, department: user.department }).catch(() => {/* non-critical */});
         setupPushNotifications(user.id).catch(() => {/* non-critical */});
         getUserTokens(user.id)
           .then(tokens => setUserTokens(tokens.map(t => t.tokenName)))

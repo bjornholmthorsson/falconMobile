@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import TravelRequestScreen from './TravelRequestScreen';
 import LunchOrdersScreen from './LunchOrdersScreen';
+import AnnouncementCreateScreen from './AnnouncementCreateScreen';
 import { useAppStore } from '../store/appStore';
 
 const CARD_SIZE = (Dimensions.get('window').width - 48) / 2;
@@ -19,7 +20,7 @@ const ITEMS: { label: string; icon: string; color: string; bg: string; action?: 
   { label: 'Sport Grant',      icon: 'run-fast',   color: '#15803d', bg: '#dcfce7', requireOffice: REYKJAVIK_OFFICES },
   { label: 'Non Car Grant',    icon: 'bus',        color: '#b45309', bg: '#fef3c7', requireOffice: REYKJAVIK_OFFICES },
   { label: 'IT Request',       icon: 'laptop',     color: '#7c3aed', bg: '#ede9fe' },
-  { label: 'Add Announcement', icon: 'bullhorn',   color: '#dc2626', bg: '#fee2e2', requireToken: 'AddAnnouncement' },
+  { label: 'Add Announcement', icon: 'bullhorn',   color: '#dc2626', bg: '#fee2e2', action: 'announcement', requireToken: 'AddAnnouncement' },
 ];
 
 export default function OtherScreen() {
@@ -27,6 +28,7 @@ export default function OtherScreen() {
   const userTokens = useAppStore(s => s.userTokens);
   const [travelOpen, setTravelOpen] = useState(false);
   const [lunchOrdersOpen, setLunchOrdersOpen] = useState(false);
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
 
   const visibleItems = useMemo(() => {
     const office = stripAccents(currentUser?.officeLocation?.toLowerCase() ?? '');
@@ -40,6 +42,7 @@ export default function OtherScreen() {
   function handlePress(action?: string) {
     if (action === 'travel') setTravelOpen(true);
     else if (action === 'lunchOrders') setLunchOrdersOpen(true);
+    else if (action === 'announcement') setAnnouncementOpen(true);
   }
 
   return (
@@ -72,6 +75,7 @@ export default function OtherScreen() {
       </ScrollView>
       <TravelRequestScreen visible={travelOpen} onClose={() => setTravelOpen(false)} />
       <LunchOrdersScreen visible={lunchOrdersOpen} onClose={() => setLunchOrdersOpen(false)} />
+      <AnnouncementCreateScreen visible={announcementOpen} onClose={() => setAnnouncementOpen(false)} />
     </>
   );
 }

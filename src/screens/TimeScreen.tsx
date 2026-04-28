@@ -27,6 +27,7 @@ import { getCalendarEvents, type CalendarEvent } from '../services/graphService'
 import {
   getTempoWorklogs,
   postTempoWorklog,
+  updateTempoWorklog,
   deleteTempoWorklog,
   searchJiraIssues,
   getTempoAbsenceTypes,
@@ -68,6 +69,23 @@ function hhmm(date: Date): string {
 
 function diffSeconds(from: Date, to: Date): number {
   return Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
+}
+
+function endTimeStr(startTime: string | null, seconds: number): string {
+  if (!startTime) return '';
+  const [h, m] = startTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return '';
+  const totalMin = h * 60 + m + Math.round(seconds / 60);
+  const eh = Math.floor(totalMin / 60) % 24;
+  const em = totalMin % 60;
+  return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+}
+
+function parseHhmm(date: string, hhmmStr: string): Date {
+  const [h, m] = hhmmStr.split(':').map(Number);
+  const d = new Date(date);
+  d.setHours(isNaN(h) ? 9 : h, isNaN(m) ? 0 : m, 0, 0);
+  return d;
 }
 
 function defaultFrom(): Date {
@@ -177,6 +195,9 @@ export default function TimeScreen() {
   const [selectedAbsenceType, setSelectedAbsenceType] = useState<TempoAbsenceType | null>(null);
   const [absenceDropdownOpen, setAbsenceDropdownOpen] = useState(false);
 
+  // ── edit state ──
+  const [editingWorklog, setEditingWorklog] = useState<TempoWorklogEntry | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
@@ -257,6 +278,7 @@ export default function TimeScreen() {
     setAbsenceDropdownOpen(false);
     setShowFromPicker(false);
     setShowToPicker(false);
+    setEditingWorklog(null);
   }
 
   function openModal(type: ModalType) {
@@ -268,25 +290,43 @@ export default function TimeScreen() {
     setActiveModal(type);
   }
 
+  function openEditModal(w: TempoWorklogEntry) {
+    resetForm();
+    setEditingWorklog(w);
+    setIssueKey(w.issueKey ?? '');
+    setIssueSummary(w.issueSummary ?? '');
+    setComment(w.comment ?? '');
+    if (w.startTime && w.date) {
+      const start = parseHhmm(w.date, w.startTime);
+      const end   = parseHhmm(w.date, endTimeStr(w.startTime, w.timeSpentSeconds));
+      setFromTime(start);
+      setToTime(end);
+    }
+    setActiveModal('worklog');
+  }
+
   const saveAndNewRef = useRef(false);
 
-  // ── worklog submit ──
+  // ── worklog submit (create or update) ──
   const { mutate: submitWorklog, isPending: submittingWorklog } = useMutation({
     mutationFn: () => {
       if (!issueKey.trim()) throw new Error('Issue key is required');
       if (formSeconds <= 0)  throw new Error('End time must be after start time');
-      return postTempoWorklog(currentUser!.id, {
+      const payload = {
         date: selectedDate,
         startTime: hhmm(fromTime),
         endTime:   hhmm(toTime),
         timeSpentSeconds: formSeconds,
         issueKey:  issueKey.trim().toUpperCase(),
         comment:   comment.trim() || undefined,
-      });
+      };
+      return editingWorklog
+        ? updateTempoWorklog(currentUser!.id, editingWorklog.id, payload)
+        : postTempoWorklog(currentUser!.id, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
-      if (saveAndNewRef.current) {
+      if (saveAndNewRef.current && !editingWorklog) {
         resetForm();
         saveAndNewRef.current = false;
       } else {
@@ -459,18 +499,28 @@ export default function TimeScreen() {
         <Text style={styles.emptyText}>No time logged for this day.</Text>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-          {worklogs.map(w => (
-            <SwipeableCard key={w.id} onDelete={() => confirmDelete(w)} isDeleting={deletingId === w.id}>
-              <View style={styles.card}>
-                <View style={styles.cardLeft}>
-                  <Text style={styles.cardKey}>{w.issueKey ?? '—'}</Text>
-                  {!!w.issueSummary && <Text style={styles.cardSummary} numberOfLines={2}>{w.issueSummary}</Text>}
-                  {!!w.comment && <Text style={styles.cardComment} numberOfLines={1}>{w.comment}</Text>}
-                </View>
-                <Text style={styles.cardDuration}>{fmtDuration(w.timeSpentSeconds)}</Text>
-              </View>
-            </SwipeableCard>
-          ))}
+          {worklogs.map(w => {
+            const endHhmm = endTimeStr(w.startTime, w.timeSpentSeconds);
+            return (
+              <SwipeableCard key={w.id} onDelete={() => confirmDelete(w)} isDeleting={deletingId === w.id}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => openEditModal(w)}>
+                  <View style={styles.card}>
+                    <View style={styles.cardLeft}>
+                      <Text style={styles.cardKey}>{w.issueKey ?? '—'}</Text>
+                      {!!w.issueSummary && <Text style={styles.cardSummary} numberOfLines={2}>{w.issueSummary}</Text>}
+                      {!!w.comment && <Text style={styles.cardComment} numberOfLines={1}>{w.comment}</Text>}
+                    </View>
+                    <View style={styles.cardRight}>
+                      <Text style={styles.cardDuration}>{fmtDuration(w.timeSpentSeconds)}</Text>
+                      {!!w.startTime && !!endHhmm && (
+                        <Text style={styles.cardTimeRange}>{w.startTime} – {endHhmm}</Text>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </SwipeableCard>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -503,7 +553,7 @@ export default function TimeScreen() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Log Work</Text>
+              <Text style={styles.modalTitle}>{editingWorklog ? 'Edit Work' : 'Log Work'}</Text>
               <TouchableOpacity onPress={() => setActiveModal(null)}>
                 <Text style={styles.modalClose}>Cancel</Text>
               </TouchableOpacity>
@@ -591,14 +641,16 @@ export default function TimeScreen() {
               value={comment} onChangeText={setComment} multiline numberOfLines={3} />
 
             <View style={styles.submitRow}>
-              <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, submittingWorklog && { opacity: 0.6 }]}
+              <TouchableOpacity style={[styles.submitBtn, !editingWorklog && styles.submitBtnHalf, submittingWorklog && { opacity: 0.6 }]}
                 onPress={() => { saveAndNewRef.current = false; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
-                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save & Close</Text>}
+                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{editingWorklog ? 'Save Changes' : 'Save & Close'}</Text>}
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, { backgroundColor: '#1e7a6e' }, submittingWorklog && { opacity: 0.6 }]}
-                onPress={() => { saveAndNewRef.current = true; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
-                {submittingWorklog && saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save & New</Text>}
-              </TouchableOpacity>
+              {!editingWorklog && (
+                <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, { backgroundColor: '#1e7a6e' }, submittingWorklog && { opacity: 0.6 }]}
+                  onPress={() => { saveAndNewRef.current = true; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
+                  {submittingWorklog && saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save & New</Text>}
+                </TouchableOpacity>
+              )}
             </View>
 
             {calendarEvents.length > 0 && (
@@ -723,11 +775,13 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  cardLeft:     { flex: 1, marginRight: 12 },
-  cardKey:      { fontSize: 13, fontWeight: '700', color: '#006559' },
-  cardSummary:  { fontSize: 13, color: '#333', marginTop: 2 },
-  cardComment:  { fontSize: 12, color: '#888', marginTop: 2 },
-  cardDuration: { fontSize: 16, fontWeight: '700', color: '#111' },
+  cardLeft:      { flex: 1, marginRight: 12 },
+  cardRight:     { alignItems: 'flex-end' },
+  cardKey:       { fontSize: 13, fontWeight: '700', color: '#006559' },
+  cardSummary:   { fontSize: 13, color: '#333', marginTop: 2 },
+  cardComment:   { fontSize: 12, color: '#888', marginTop: 2 },
+  cardDuration:  { fontSize: 16, fontWeight: '700', color: '#111' },
+  cardTimeRange: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
 
   // FAB
   fab: {

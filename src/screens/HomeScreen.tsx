@@ -18,7 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { getUsersByDepartment, getPresenceForUsers, DEPARTMENTS, getDepartmentLabel, getDepartmentOffices, loadDepartmentLabels } from '../services/graphService';
-import { getUserAbsences, getLunchMenu, getLunchOrders } from '../services/api';
+import { getUserAbsences, getLunchMenu, getLunchOrders, getAnnouncements, dismissAnnouncement, type Announcement } from '../services/api';
 import { signOut } from '../services/authService';
 import { useAppStore, type InAppNotification } from '../store/appStore';
 import { decrementBadge, removeDeliveredNotification } from '../services/notificationService';
@@ -124,7 +124,8 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => {
     setCycle(c => c + 1);
-  }, []));
+    queryClient.invalidateQueries({ queryKey: ['announcements'] });
+  }, [queryClient]));
 
   function handleDeptCardPress(department: string) {
     setTeamOfficeFilter([department]);
@@ -148,6 +149,23 @@ export default function HomeScreen() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const userDept = currentUser?.department ?? null;
+  const { data: announcements = [], refetch: refetchAnnouncements } = useQuery<Announcement[]>({
+    queryKey: ['announcements', currentUser?.id],
+    queryFn:  () => getAnnouncements(currentUser!.id, userDept),
+    enabled:  !!currentUser,
+    staleTime: 60 * 1000,
+  });
+
+  async function handleDismissAnnouncement(a: Announcement) {
+    if (!currentUser) return;
+    queryClient.setQueryData<Announcement[]>(['announcements', currentUser.id], prev =>
+      (prev ?? []).filter(x => x.id !== a.id),
+    );
+    try { await dismissAnnouncement(a.id, currentUser.id); }
+    catch { refetchAnnouncements(); }
+  }
+
   const [isLunchRefreshing, setIsLunchRefreshing] = useState(false);
 
   async function handlePullRefresh() {
@@ -157,6 +175,7 @@ export default function HomeScreen() {
       refetch(),
       refetchMenu(),
       refetchOrders(),
+      refetchAnnouncements(),
       queryClient.invalidateQueries({ queryKey: ['weather'] }),
     ]);
     setIsLunchRefreshing(false);
@@ -222,6 +241,17 @@ export default function HomeScreen() {
         />
       }
     >
+      {announcements.length > 0 && (
+        <View style={styles.notifList}>
+          {announcements.map(a => (
+            <AnnouncementBanner
+              key={a.id}
+              announcement={a}
+              onDismiss={() => handleDismissAnnouncement(a)}
+            />
+          ))}
+        </View>
+      )}
       {notifications.length > 0 && (
         <View style={styles.notifList}>
           {notifications.map(n => (
@@ -388,6 +418,29 @@ function LunchWeekCard({
           );
         })}
       </View>
+    </TouchableOpacity>
+  );
+}
+
+function AnnouncementBanner({ announcement, onDismiss }: { announcement: Announcement; onDismiss: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={() => setExpanded(v => !v)} style={styles.announceBanner}>
+      <Icon name="bullhorn" size={22} color="#fff" style={styles.notifIcon} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.announceTitle}>{announcement.title}</Text>
+        <Text style={styles.announceBody} numberOfLines={expanded ? undefined : 1}>
+          {announcement.body}
+        </Text>
+        {expanded && (
+          <Text style={styles.announceMeta}>
+            From {announcement.createdBy} · {new Date(announcement.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+          </Text>
+        )}
+      </View>
+      <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Icon name="close" size={20} color="#fff" />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }
@@ -566,4 +619,17 @@ const styles = StyleSheet.create({
   notifIcon: { marginRight: 12 },
   notifText: { flex: 1, fontSize: 14, color: '#374151', lineHeight: 20, marginRight: 10 },
   notifTitle: { fontWeight: '700', color: '#111' },
+
+  // Announcement banner (dark orange)
+  announceBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#c2410c',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  announceTitle: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 2 },
+  announceBody:  { fontSize: 13, color: '#fff', opacity: 0.95, lineHeight: 18, marginRight: 10 },
+  announceMeta:  { fontSize: 11, color: '#fff', opacity: 0.75, marginTop: 6 },
 });

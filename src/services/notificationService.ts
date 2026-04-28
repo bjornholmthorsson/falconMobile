@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { registerDeviceToken } from './api';
 import { useAppStore } from '../store/appStore';
+import { queryClient } from './queryClient';
 
 let listenerSetUp = false;
 
@@ -73,6 +74,12 @@ export async function setupPushNotifications(userId: string): Promise<void> {
 }
 
 function addNotificationFromPayload(notification: any): void {
+  const data  = notification.getData?.() ?? {};
+  // Announcements have their own banner sourced from the GET fetch — refetch instead of duplicating
+  if (data?.type === 'announcement') {
+    queryClient.invalidateQueries({ queryKey: ['announcements'] });
+    return;
+  }
   const alert = notification.getAlert?.();
   if (alert) {
     const title = typeof alert === 'string' ? alert : alert.title ?? '';

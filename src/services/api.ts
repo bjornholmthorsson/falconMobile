@@ -372,6 +372,25 @@ export async function postTempoWorklog(
   return true;
 }
 
+export async function updateTempoWorklog(
+  userId: string,
+  worklogId: number,
+  entry: { date: string; startTime: string; endTime: string; timeSpentSeconds: number; issueKey: string; comment?: string },
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/tempo/worklogs/${userId}/${worklogId}?code=${CODE}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+  return true;
+}
+
 export async function deleteTempoWorklog(
   userId: string,
   worklogId: number,
@@ -452,6 +471,96 @@ export async function registerUserData(
     },
   );
   return res.ok;
+}
+
+// ── Announcements ─────────────────────────────────────────────────────────────
+
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  targetDepartments: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export async function getAnnouncements(
+  userId: string,
+  department?: string | null,
+  signal?: AbortSignal,
+): Promise<Announcement[]> {
+  const deptParam = department ? `&department=${encodeURIComponent(department)}` : '';
+  return apiGet<Announcement[]>(
+    `/api/announcements?userId=${encodeURIComponent(userId)}${deptParam}&code=${CODE}`,
+    signal,
+  );
+}
+
+export async function createAnnouncement(
+  payload: { title: string; body: string; targetDepartments: string[]; createdBy: string },
+  signal?: AbortSignal,
+): Promise<Announcement & { pushedCount: number }> {
+  const res = await fetch(`${BASE_URL}/api/announcements?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+  return res.json() as Promise<Announcement & { pushedCount: number }>;
+}
+
+export async function dismissAnnouncement(
+  id: number,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/announcements/${id}/dismiss?userId=${encodeURIComponent(userId)}&code=${CODE}`,
+    { method: 'POST', signal },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+}
+
+export interface NotificationPreferences {
+  announcementsEnabled: boolean;
+}
+
+export async function getNotificationPreferences(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<NotificationPreferences> {
+  return apiGet<NotificationPreferences>(
+    `/api/notification-preferences/${encodeURIComponent(userId)}?code=${CODE}`,
+    signal,
+  );
+}
+
+export async function setNotificationPreferences(
+  userId: string,
+  prefs: NotificationPreferences,
+  signal?: AbortSignal,
+): Promise<NotificationPreferences> {
+  const res = await fetch(
+    `${BASE_URL}/api/notification-preferences/${encodeURIComponent(userId)}?code=${CODE}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+  }
+  return res.json() as Promise<NotificationPreferences>;
 }
 
 // ── Device Tokens ─────────────────────────────────────────────────────────────
