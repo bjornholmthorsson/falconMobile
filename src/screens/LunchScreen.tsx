@@ -45,9 +45,11 @@ const HOLIDAY_IS: Record<string, string> = {
 };
 
 const UI_STRINGS: Record<string, Record<string, string>> = {
-  en: { menu: "'s Menu", order: 'Current Order', noMenu: 'No menu for this week!' },
-  is: { menu: ' matseðill', order: 'Pöntun vikunnar', noMenu: 'Enginn matseðill fyrir þessa viku!' },
+  en: { menu: "'s Menu", order: 'Current Order', noMenu: 'No menu for this week!', noThanks: 'No thanks', noThanksDesc: 'Skip lunch this day' },
+  is: { menu: ' matseðill', order: 'Pöntun vikunnar', noMenu: 'Enginn matseðill fyrir þessa viku!', noThanks: 'Nei takk', noThanksDesc: 'Sleppa þessum degi' },
 };
+
+const NO_THANKS = 'No thanks';
 
 // ── Food tile helpers ─────────────────────────────────────────────────────────
 
@@ -184,7 +186,7 @@ export default function LunchScreen() {
   if (data) {
     for (const day of data.days) {
       const category = selections[day.id];
-      if (category && category !== 'No thanks') {
+      if (category && category !== NO_THANKS) {
         const option = day.options.find(o => o.category === category);
         if (option) orderItems.push({ day, option });
       }
@@ -290,7 +292,7 @@ export default function LunchScreen() {
             ) : (
               <View style={styles.menuCard}>
                 <Text style={styles.menuCardTitle}>{activeDay.dayOfWeek}{strings.menu}</Text>
-                {activeDay.options.map((opt, index) => {
+                {activeDay.options.filter(o => o.category !== NO_THANKS).map((opt, index) => {
                   const selected = selections[activeDay.id] === opt.category;
                   const isFirst  = index === 0;
                   return (
@@ -330,6 +332,36 @@ export default function LunchScreen() {
                     </TouchableOpacity>
                   );
                 })}
+                {(() => {
+                  const selected = selections[activeDay.id] === NO_THANKS;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.menuItem, styles.noThanksItem, selected && styles.menuItemSelected]}
+                      onPress={() => toggleSelection(activeDay.id, NO_THANKS)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.foodTile, { backgroundColor: '#f3f4f6' }]}>
+                        <Icon name="food-off-outline" size={26} color="#6b7280" />
+                      </View>
+                      <View style={styles.menuItemLeft}>
+                        <Text style={[styles.menuItemName, selected && styles.menuItemNameSelected]}>
+                          {strings.noThanks}
+                        </Text>
+                        <Text style={styles.menuItemDesc}>{strings.noThanksDesc}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.addBtn, selected && styles.addBtnSelected]}
+                        onPress={() => toggleSelection(activeDay.id, NO_THANKS)}
+                      >
+                        <Icon
+                          name={selected ? 'check' : 'plus'}
+                          size={18}
+                          color={selected ? '#fff' : '#006559'}
+                        />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             )
           ) : null}
@@ -473,6 +505,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   menuItemSelected: { backgroundColor: '#f0faf7', borderRadius: 10, paddingHorizontal: 8, marginHorizontal: -8 },
+  noThanksItem:     { borderBottomWidth: 0 },
   menuItemLeft:     { flex: 1, gap: 3 },
   foodTile: {
     width: 52, height: 52, borderRadius: 12,
