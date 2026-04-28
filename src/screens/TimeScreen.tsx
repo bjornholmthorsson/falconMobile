@@ -198,6 +198,15 @@ export default function TimeScreen() {
   // ── edit state ──
   const [editingWorklog, setEditingWorklog] = useState<TempoWorklogEntry | null>(null);
 
+  // ── time-entry mode ──
+  const [timeMode, setTimeMode] = useState<'fromto' | 'hours'>('fromto');
+  const [hoursInput, setHoursInput] = useState('');
+
+  function parseHours(s: string): number {
+    const n = parseFloat(s.replace(',', '.'));
+    return isNaN(n) ? 0 : Math.max(0, n);
+  }
+
   useFocusEffect(
     useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
@@ -265,7 +274,17 @@ export default function TimeScreen() {
       ],
     );
   }
-  const formSeconds  = diffSeconds(fromTime, toTime);
+  const formSeconds = timeMode === 'fromto'
+    ? diffSeconds(fromTime, toTime)
+    : Math.round(parseHours(hoursInput) * 3600);
+
+  function getTimeFields() {
+    if (timeMode === 'fromto') {
+      return { startTime: hhmm(fromTime), endTime: hhmm(toTime) };
+    }
+    const start = '09:00';
+    return { startTime: start, endTime: endTimeStr(start, formSeconds) };
+  }
 
   function resetForm() {
     setIssueKey('');
@@ -279,6 +298,13 @@ export default function TimeScreen() {
     setShowFromPicker(false);
     setShowToPicker(false);
     setEditingWorklog(null);
+    setTimeMode('fromto');
+    setHoursInput('');
+  }
+
+  function closeModal() {
+    setActiveModal(null);
+    resetForm();
   }
 
   function openModal(type: ModalType) {
@@ -311,11 +337,12 @@ export default function TimeScreen() {
   const { mutate: submitWorklog, isPending: submittingWorklog } = useMutation({
     mutationFn: () => {
       if (!issueKey.trim()) throw new Error('Issue key is required');
-      if (formSeconds <= 0)  throw new Error('End time must be after start time');
+      if (formSeconds <= 0)  throw new Error(timeMode === 'fromto' ? 'End time must be after start time' : 'Please enter a number of hours');
+      const { startTime, endTime } = getTimeFields();
       const payload = {
         date: selectedDate,
-        startTime: hhmm(fromTime),
-        endTime:   hhmm(toTime),
+        startTime,
+        endTime,
         timeSpentSeconds: formSeconds,
         issueKey:  issueKey.trim().toUpperCase(),
         comment:   comment.trim() || undefined,
@@ -342,11 +369,12 @@ export default function TimeScreen() {
     mutationFn: () => {
       if (!selectedAbsenceType)          throw new Error('Please select an absence type');
       if (!selectedAbsenceType.jiraKey)  throw new Error('This absence type has no Jira issue configured');
-      if (formSeconds <= 0)              throw new Error('End time must be after start time');
+      if (formSeconds <= 0)              throw new Error(timeMode === 'fromto' ? 'End time must be after start time' : 'Please enter a number of hours');
+      const { startTime, endTime } = getTimeFields();
       return postTempoWorklog(currentUser!.id, {
         date: selectedDate,
-        startTime: hhmm(fromTime),
-        endTime:   hhmm(toTime),
+        startTime,
+        endTime,
         timeSpentSeconds: formSeconds,
         issueKey:  selectedAbsenceType.jiraKey,
         comment:   comment.trim() || selectedAbsenceType.name,
@@ -407,51 +435,87 @@ export default function TimeScreen() {
     return (
       <>
         <Text style={styles.fieldLabel}>Time *</Text>
-        <View style={styles.timeRow}>
-          <View style={styles.timeBlock}>
-            <Text style={styles.timeBlockLabel}>From</Text>
-            <TouchableOpacity style={styles.timeBtn} onPress={() => { setShowToPicker(false); setShowFromPicker(true); }}>
-              <Icon name="clock-outline" size={16} color="#006559" />
-              <Text style={styles.timeBtnText}>{fmtTime(fromTime)}</Text>
-            </TouchableOpacity>
-          </View>
-          <Icon name="arrow-right" size={20} color="#9ca3af" style={{ marginTop: 22 }} />
-          <View style={styles.timeBlock}>
-            <Text style={styles.timeBlockLabel}>To</Text>
-            <TouchableOpacity style={styles.timeBtn} onPress={() => { setShowFromPicker(false); setShowToPicker(true); }}>
-              <Icon name="clock-outline" size={16} color="#006559" />
-              <Text style={styles.timeBtnText}>{fmtTime(toTime)}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.timeBlock}>
-            <Text style={styles.timeBlockLabel}>Duration</Text>
-            <View style={[styles.timeBtn, { backgroundColor: '#f0f0f0' }]}>
-              <Text style={[styles.timeBtnText, { color: formSeconds > 0 ? '#006559' : '#ef4444', fontWeight: '700' }]}>
-                {formSeconds > 0 ? fmtDuration(formSeconds) : '—'}
-              </Text>
-            </View>
-          </View>
+        <View style={styles.modeToggle}>
+          <TouchableOpacity
+            style={[styles.modeBtn, timeMode === 'fromto' && styles.modeBtnActive]}
+            onPress={() => setTimeMode('fromto')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.modeBtnText, timeMode === 'fromto' && styles.modeBtnTextActive]}>From / To</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, timeMode === 'hours' && styles.modeBtnActive]}
+            onPress={() => setTimeMode('hours')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.modeBtnText, timeMode === 'hours' && styles.modeBtnTextActive]}>Hours</Text>
+          </TouchableOpacity>
         </View>
 
-        {showFromPicker && (
-          <DateTimePicker value={fromTime} mode="time" is24Hour
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(_, d) => { if (Platform.OS === 'android') setShowFromPicker(false); if (d) setFromTime(d); }} />
-        )}
-        {Platform.OS === 'ios' && showFromPicker && (
-          <TouchableOpacity style={styles.pickerDone} onPress={() => setShowFromPicker(false)}>
-            <Text style={styles.pickerDoneText}>Done</Text>
-          </TouchableOpacity>
-        )}
-        {showToPicker && (
-          <DateTimePicker value={toTime} mode="time" is24Hour
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(_, d) => { if (Platform.OS === 'android') setShowToPicker(false); if (d) setToTime(d); }} />
-        )}
-        {Platform.OS === 'ios' && showToPicker && (
-          <TouchableOpacity style={styles.pickerDone} onPress={() => setShowToPicker(false)}>
-            <Text style={styles.pickerDoneText}>Done</Text>
-          </TouchableOpacity>
+        {timeMode === 'fromto' ? (
+          <>
+            <View style={styles.timeRow}>
+              <View style={styles.timeBlock}>
+                <Text style={styles.timeBlockLabel}>From</Text>
+                <TouchableOpacity style={styles.timeBtn} onPress={() => { setShowToPicker(false); setShowFromPicker(true); }}>
+                  <Icon name="clock-outline" size={16} color="#006559" />
+                  <Text style={styles.timeBtnText}>{fmtTime(fromTime)}</Text>
+                </TouchableOpacity>
+              </View>
+              <Icon name="arrow-right" size={20} color="#9ca3af" style={{ marginTop: 22 }} />
+              <View style={styles.timeBlock}>
+                <Text style={styles.timeBlockLabel}>To</Text>
+                <TouchableOpacity style={styles.timeBtn} onPress={() => { setShowFromPicker(false); setShowToPicker(true); }}>
+                  <Icon name="clock-outline" size={16} color="#006559" />
+                  <Text style={styles.timeBtnText}>{fmtTime(toTime)}</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.timeBlock}>
+                <Text style={styles.timeBlockLabel}>Duration</Text>
+                <View style={[styles.timeBtn, { backgroundColor: '#f0f0f0' }]}>
+                  <Text style={[styles.timeBtnText, { color: formSeconds > 0 ? '#006559' : '#ef4444', fontWeight: '700' }]}>
+                    {formSeconds > 0 ? fmtDuration(formSeconds) : '—'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {showFromPicker && (
+              <DateTimePicker value={fromTime} mode="time" is24Hour
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, d) => { if (Platform.OS === 'android') setShowFromPicker(false); if (d) setFromTime(d); }} />
+            )}
+            {Platform.OS === 'ios' && showFromPicker && (
+              <TouchableOpacity style={styles.pickerDone} onPress={() => setShowFromPicker(false)}>
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            )}
+            {showToPicker && (
+              <DateTimePicker value={toTime} mode="time" is24Hour
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, d) => { if (Platform.OS === 'android') setShowToPicker(false); if (d) setToTime(d); }} />
+            )}
+            {Platform.OS === 'ios' && showToPicker && (
+              <TouchableOpacity style={styles.pickerDone} onPress={() => setShowToPicker(false)}>
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={styles.hoursRow}>
+            <Text style={styles.timeBlockLabel}>Hours</Text>
+            <TextInput
+              style={styles.hoursInput}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 2.5"
+              placeholderTextColor="#aaa"
+              value={hoursInput}
+              onChangeText={setHoursInput}
+            />
+            {formSeconds > 0 && (
+              <Text style={styles.hoursHelper}>= {fmtDuration(formSeconds)}</Text>
+            )}
+          </View>
         )}
       </>
     );
@@ -549,12 +613,12 @@ export default function TimeScreen() {
       </TouchableOpacity>
 
       {/* ══ Worklog modal ══ */}
-      <Modal visible={activeModal === 'worklog'} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setActiveModal(null)}>
+      <Modal visible={activeModal === 'worklog'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingWorklog ? 'Edit Work' : 'Log Work'}</Text>
-              <TouchableOpacity onPress={() => setActiveModal(null)}>
+              <TouchableOpacity onPress={closeModal}>
                 <Text style={styles.modalClose}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -640,10 +704,14 @@ export default function TimeScreen() {
             <TextInput style={[styles.input, styles.inputMultiline]} placeholder="Optional description" placeholderTextColor="#aaa"
               value={comment} onChangeText={setComment} multiline numberOfLines={3} />
 
-            <View style={styles.submitRow}>
-              <TouchableOpacity style={[styles.submitBtn, !editingWorklog && styles.submitBtnHalf, submittingWorklog && { opacity: 0.6 }]}
-                onPress={() => { saveAndNewRef.current = false; submitWorklog(); }} disabled={submittingWorklog} activeOpacity={0.85}>
-                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{editingWorklog ? 'Save Changes' : 'Save & Close'}</Text>}
+            <View style={[styles.submitRow, editingWorklog && styles.submitRowCentered]}>
+              <TouchableOpacity
+                style={[styles.submitBtn, editingWorklog ? styles.submitBtnSolo : styles.submitBtnHalf, submittingWorklog && { opacity: 0.6 }]}
+                onPress={() => { saveAndNewRef.current = false; submitWorklog(); }}
+                disabled={submittingWorklog}
+                activeOpacity={0.85}
+              >
+                {submittingWorklog && !saveAndNewRef.current ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>{editingWorklog ? 'Save' : 'Save & Close'}</Text>}
               </TouchableOpacity>
               {!editingWorklog && (
                 <TouchableOpacity style={[styles.submitBtn, styles.submitBtnHalf, { backgroundColor: '#1e7a6e' }, submittingWorklog && { opacity: 0.6 }]}
@@ -686,12 +754,12 @@ export default function TimeScreen() {
       </Modal>
 
       {/* ══ Absence modal ══ */}
-      <Modal visible={activeModal === 'absence'} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setActiveModal(null)}>
+      <Modal visible={activeModal === 'absence'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Log Absence</Text>
-              <TouchableOpacity onPress={() => setActiveModal(null)}>
+              <TouchableOpacity onPress={closeModal}>
                 <Text style={styles.modalClose}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -834,6 +902,27 @@ const styles = StyleSheet.create({
   suggestionKey:    { fontSize: 13, fontWeight: '700', color: '#006559', width: 60 },
   suggestionSummary:{ flex: 1, fontSize: 13, color: '#333' },
   selectedSummary:  { fontSize: 13, color: '#555', marginTop: 6, marginLeft: 2 },
+  // mode toggle
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 2,
+    marginBottom: 10,
+  },
+  modeBtn:           { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  modeBtnActive:     { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  modeBtnText:       { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  modeBtnTextActive: { color: '#006559' },
+
+  // hours mode
+  hoursRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  hoursInput: {
+    flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 15, color: '#111', borderWidth: 1, borderColor: '#e5e5e5',
+  },
+  hoursHelper: { fontSize: 13, color: '#006559', fontWeight: '700' },
+
   // time row
   timeRow:        { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   timeBlock:      { flex: 1 },
@@ -873,9 +962,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4,
   },
   absenceDateText: { fontSize: 14, fontWeight: '600', color: '#006559' },
-  submitRow:      { flexDirection: 'row', gap: 10, marginTop: 32, marginBottom: 16 },
-  submitBtn:      { backgroundColor: '#006559', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 0, marginBottom: 0 },
-  submitBtnHalf:  { flex: 1 },
+  submitRow:         { flexDirection: 'row', gap: 10, marginTop: 32, marginBottom: 16 },
+  submitRowCentered: { justifyContent: 'center' },
+  submitBtn:         { backgroundColor: '#006559', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 0, marginBottom: 0 },
+  submitBtnHalf:     { flex: 1 },
+  submitBtnSolo:     { minWidth: 220, paddingHorizontal: 32 },
   submitBtnText:  { color: '#fff', fontSize: 16, fontWeight: '700' },
   // calendar suggestions
   calendarScroll: { marginTop: 4, marginBottom: 32 },

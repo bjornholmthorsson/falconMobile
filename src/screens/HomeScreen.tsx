@@ -426,7 +426,7 @@ function AnnouncementBanner({ announcement, onDismiss }: { announcement: Announc
   const [expanded, setExpanded] = useState(false);
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={() => setExpanded(v => !v)} style={styles.announceBanner}>
-      <Icon name="bullhorn" size={22} color="#fff" style={styles.notifIcon} />
+      <Icon name="bullhorn" size={22} color="#dc2626" style={styles.notifIcon} />
       <View style={{ flex: 1 }}>
         <Text style={styles.announceTitle}>{announcement.title}</Text>
         <Text style={styles.announceBody} numberOfLines={expanded ? undefined : 1}>
@@ -439,7 +439,7 @@ function AnnouncementBanner({ announcement, onDismiss }: { announcement: Announc
         )}
       </View>
       <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Icon name="close" size={20} color="#fff" />
+        <Icon name="close" size={20} color="#dc2626" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -620,16 +620,16 @@ const styles = StyleSheet.create({
   notifText: { flex: 1, fontSize: 14, color: '#374151', lineHeight: 20, marginRight: 10 },
   notifTitle: { fontWeight: '700', color: '#111' },
 
-  // Announcement banner (dark orange)
+  // Announcement banner (light red, matches Add Announcement card on Other tab)
   announceBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#c2410c',
+    backgroundColor: '#fee2e2',
     borderRadius: 20,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  announceTitle: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 2 },
-  announceBody:  { fontSize: 13, color: '#fff', opacity: 0.95, lineHeight: 18, marginRight: 10 },
-  announceMeta:  { fontSize: 11, color: '#fff', opacity: 0.75, marginTop: 6 },
+  announceTitle: { fontSize: 14, fontWeight: '800', color: '#111', marginBottom: 2 },
+  announceBody:  { fontSize: 13, color: '#374151', lineHeight: 18, marginRight: 10 },
+  announceMeta:  { fontSize: 11, color: '#9ca3af', marginTop: 6 },
 });
