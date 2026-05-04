@@ -14,3 +14,6 @@ gem 'bigdecimal'
 gem 'logger'
 gem 'benchmark'
 gem 'mutex_m'
+
+# Play Store deploys (see fastlane/Fastfile)
+gem 'fastlane', '>= 2.220'

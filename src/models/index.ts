@@ -52,6 +52,8 @@ export interface KnownLocation {
 
 export interface UserSettings {
   checkinEnabled: boolean;
+  worklogReminderEnabled: boolean;
+  worklogReminderDays: number;
 }
 
 export interface UserAbsence {

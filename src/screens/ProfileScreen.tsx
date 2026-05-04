@@ -88,6 +88,55 @@ export default function ProfileScreen() {
     }
   }
 
+  // ── Worklog reminder settings ──
+  const { data: settings } = useQuery({
+    queryKey: ['userSettings', currentUser?.id],
+    queryFn:  () => getUserSettings(currentUser!.id),
+    enabled:  !!currentUser,
+    staleTime: 5 * 60 * 1000,
+  });
+  const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
+  const [reminderDaysStr, setReminderDaysStr] = useState<string>('7');
+  const [savingReminder, setSavingReminder]   = useState(false);
+
+  React.useEffect(() => {
+    if (settings) {
+      setReminderEnabled(settings.worklogReminderEnabled ?? false);
+      setReminderDaysStr(String(settings.worklogReminderDays ?? 7));
+    }
+  }, [settings]);
+
+  async function handleToggleReminder(value: boolean) {
+    if (!currentUser) return;
+    setReminderEnabled(value);
+    setSavingReminder(true);
+    try {
+      const updated = await updateUserSettings(currentUser.id, { worklogReminderEnabled: value });
+      qc.setQueryData(['userSettings', currentUser.id], updated);
+    } catch (err: any) {
+      setReminderEnabled(!value);
+      Alert.alert('Could not save', err?.message ?? 'Try again later');
+    } finally {
+      setSavingReminder(false);
+    }
+  }
+
+  async function commitReminderDays() {
+    if (!currentUser) return;
+    const n = Math.max(1, Math.min(90, parseInt(reminderDaysStr, 10) || 7));
+    setReminderDaysStr(String(n));
+    if (settings && n === settings.worklogReminderDays) return;
+    setSavingReminder(true);
+    try {
+      const updated = await updateUserSettings(currentUser.id, { worklogReminderDays: n });
+      qc.setQueryData(['userSettings', currentUser.id], updated);
+    } catch (err: any) {
+      Alert.alert('Could not save', err?.message ?? 'Try again later');
+    } finally {
+      setSavingReminder(false);
+    }
+  }
+
   const [editSlackOpen, setEditSlackOpen] = useState(false);
   const [slackId, setSlackId] = useState('');
   const [editJiraOpen, setEditJiraOpen] = useState(false);
@@ -410,6 +459,52 @@ export default function ProfileScreen() {
               />
           }
         </View>
+        <View style={styles.settingsDivider} />
+        <View style={styles.settingsRow}>
+          <View style={styles.settingsRowLeft}>
+            <View style={styles.settingsIcon}>
+              <Icon name="bell-ring-outline" size={20} color="#006559" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsRowTitle}>Worklog reminder</Text>
+              <Text style={styles.settingsRowSub}>
+                Push notification on weekday mornings if you've gone too long without logging
+              </Text>
+            </View>
+          </View>
+          {savingReminder
+            ? <ActivityIndicator size="small" color="#006559" />
+            : <Switch
+                value={reminderEnabled}
+                onValueChange={handleToggleReminder}
+                trackColor={{ false: '#d1d5db', true: '#006559' }}
+                thumbColor="#fff"
+              />
+          }
+        </View>
+        {reminderEnabled && (
+          <View style={[styles.settingsRow, { paddingTop: 0 }]}>
+            <View style={styles.settingsRowLeft}>
+              <View style={[styles.settingsIcon, { opacity: 0 }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsRowSub}>Remind me after</Text>
+              </View>
+            </View>
+            <View style={reminderInlineStyles.inputWrap}>
+              <TextInput
+                style={reminderInlineStyles.input}
+                value={reminderDaysStr}
+                onChangeText={setReminderDaysStr}
+                onBlur={commitReminderDays}
+                keyboardType="number-pad"
+                returnKeyType="done"
+                onSubmitEditing={commitReminderDays}
+                maxLength={2}
+              />
+              <Text style={reminderInlineStyles.unit}>days</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* ── Member Details ── */}
@@ -706,6 +801,23 @@ function PersonalField({ label, value, onChange, keyboardType, placeholder }: {
     </View>
   );
 }
+
+const reminderInlineStyles = StyleSheet.create({
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  input: {
+    width: 50,
+    backgroundColor: '#fff',
+    borderColor: '#e5e5e5',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 15,
+    color: '#111',
+    textAlign: 'center',
+  },
+  unit: { fontSize: 13, color: '#6b7280' },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#C7D3D3' },

@@ -1,0 +1,24 @@
+Akkuro Connect is the everyday companion app for Akkuro and Five Degrees employees. Sign in once with your corporate Microsoft account and stay connected to the moments that matter on your work day.
+
+WHAT YOU CAN DO
+
+• Time & Absence — Log work and absences directly into Tempo. Calendar-aware suggestions, Jira ticket favorites, and a clean entry flow make daily registration quick.
+
+• Lunch Orders — Browse the weekly menu in English or Icelandic, place your daily order, and check what your team picked. Holiday days are flagged automatically.
+
+• Travel Requests — Submit a travel request in seconds and review your own requests in a dedicated tab, grouped into Open and Closed for clarity.
+
+• Team Presence — See who is available, in a meeting, or away across departments. Group cards show city weather, presence breakdown, and live counts.
+
+• Location Check-ins — Optional automatic check-ins to known company offices and client sites, with privacy controls.
+
+• Profile & Settings — Keep personal information, Slack and Jira identifiers, worklog rules, and your second calendar account up to date.
+
+DESIGNED FOR INTERNAL USE
+Akkuro Connect is provided exclusively for Akkuro and Five Degrees employees and authorised contractors. Sign-in requires a valid corporate Microsoft 365 account.
+
+PRIVACY FIRST
+Data stays in our Azure tenant in Europe. We do not show ads, do not sell data, and do not share information with third parties beyond what the app needs to function (Microsoft Graph for sign-in and calendar, Atlassian Jira/Tempo for time and travel, Apple/Google push services for notifications). Read the full Privacy Policy at the link below.
+
+SUPPORT
+Questions or feedback? Email bjorn.holmthorsson@akkuro.com.

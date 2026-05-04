@@ -1,0 +1,9 @@
+Time tab gets a Day / Week / Month toggle.
+
+- Week view: 7-day strip with per-day totals
+- Month view: full Tempo period (23rd–22nd), Monday-aligned
+- Tap a day to focus; double-tap to drill into Day view
+- Weekends and Icelandic public holidays tinted; today outlined
+- Plus button works in every view
+
+Profile: optional worklog reminder. Opt in to get a push on weekday mornings if you've gone past your threshold (default 7 days, configurable).

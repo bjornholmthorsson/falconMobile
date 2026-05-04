@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
-import { getUserSettings, getUserTokens, registerUserData } from '../services/api';
+import { getUserSettings, getUserTokens, recordSignInEvent, registerUserData } from '../services/api';
 import { setupPushNotifications, setupNotificationListeners, syncDeliveredNotifications } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
+import pkg from '../../package.json';
 
 /**
  * Fetches the current user profile in the background once authenticated.
@@ -58,6 +59,13 @@ export function useLoadCurrentUser() {
       .then(user => {
         setCurrentUser(user);
         registerUserData(user.id, { displayName: user.displayName, department: user.department }).catch(() => {/* non-critical */});
+        recordSignInEvent({
+          userId: user.id,
+          appVersion: pkg.version,
+          platform: Platform.OS,
+          displayName: user.displayName,
+          department: user.department ?? undefined,
+        }).catch(() => {/* non-critical — analytics only */});
         setupPushNotifications(user.id).catch(() => {/* non-critical */});
         getUserTokens(user.id)
           .then(tokens => setUserTokens(tokens.map(t => t.tokenName)))

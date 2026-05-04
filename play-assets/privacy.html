@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Akkuro Connect — Privacy Policy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.55; }
+  h1 { color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 8px; }
+  h2 { color: #0066cc; margin-top: 32px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+  small { color: #666; }
+  ul { padding-left: 22px; }
+</style>
+</head>
+<body>
+<h1>Akkuro Connect — Privacy Policy</h1>
+<small>Last updated: 2026-05-01</small>
+
+<p>This is the privacy policy for <strong>Akkuro Connect</strong> (Android
+package <code>com.akkuro.connect</code>), an internal employee app for
+Akkuro and Five Degrees personnel and authorised contractors.
+Akkuro Connect is published on Google Play and Apple App Store as a
+limited-distribution corporate app and is not intended for general
+public use.</p>
+
+<h2>Who we are</h2>
+<p>The data controller is <strong>Akkuro</strong>. Questions, deletion
+requests, and other privacy enquiries can be sent to
+<a href="mailto:bjorn.holmthorsson@akkuro.com">bjorn.holmthorsson@akkuro.com</a>.</p>
+
+<h2>What data we process</h2>
+<p>To function, Akkuro Connect processes the following data:</p>
+<ul>
+  <li><strong>Sign-in identity</strong> — name, work email (UPN) and
+      Azure AD object ID, retrieved via Microsoft 365 / Microsoft Graph
+      when you sign in.</li>
+  <li><strong>Profile information you enter</strong> — phone numbers,
+      address, role, start date, Slack and Jira identifiers,
+      worklog rules, and other free-form profile fields. All of these
+      are optional.</li>
+  <li><strong>Time entries and travel requests</strong> — the work and
+      travel data you submit, which is forwarded to Atlassian Jira / Tempo.</li>
+  <li><strong>Lunch orders</strong> — your daily lunch selections,
+      stored against your account.</li>
+  <li><strong>Calendar events</strong> — read on-device from Microsoft
+      Graph to power calendar-aware suggestions when you log time. We do
+      not transmit calendar contents to our backend.</li>
+  <li><strong>Push-notification token</strong> — APNS or FCM token used
+      to deliver in-app notifications. Only collected if you allow
+      notifications.</li>
+  <li><strong>Location</strong> — only when you explicitly turn on
+      "Check-in to known locations" in your profile. Coordinates are
+      matched server-side against known company / client offices to
+      record check-ins; raw coordinates are not retained long-term.
+      Off by default.</li>
+  <li><strong>Diagnostic logs</strong> — basic backend request logs
+      with no personal payloads, used for troubleshooting.</li>
+</ul>
+
+<h2>What we do NOT collect</h2>
+<ul>
+  <li>No advertising identifiers. No ads. No third-party trackers or
+      analytics SDKs.</li>
+  <li>No SMS, photos, audio, files, contacts, or browsing history.</li>
+  <li>No financial or health data.</li>
+</ul>
+
+<h2>How data is shared</h2>
+<ul>
+  <li><strong>Microsoft</strong> — sign-in and profile information is
+      processed by Microsoft 365 / Microsoft Graph as part of corporate
+      authentication.</li>
+  <li><strong>Atlassian (Jira / Tempo)</strong> — time entries and
+      travel requests are submitted on your behalf to your corporate
+      Jira / Tempo instance.</li>
+  <li><strong>Apple / Google push services</strong> — APNS and FCM
+      receive opaque push-notification payloads to deliver
+      notifications.</li>
+</ul>
+<p>We do not sell personal data and do not share it with third parties
+for marketing or analytics.</p>
+
+<h2>Where data is stored</h2>
+<p>Application data is stored in our Azure tenant in Europe (Azure
+PostgreSQL and Azure Cosmos DB). All transport uses TLS 1.2 or higher.</p>
+
+<h2>How long we retain data</h2>
+<ul>
+  <li>Active account data is retained while your corporate Microsoft
+      account remains active.</li>
+  <li>When your corporate account is deactivated, your Akkuro Connect
+      record is removed within 90 days.</li>
+  <li>You can request earlier deletion by emailing the address above.</li>
+</ul>
+
+<h2>Your rights</h2>
+<p>Within applicable EU/EEA data-protection law (GDPR) you have the right
+to access, correct, delete, restrict processing of, or port your personal
+data, and to object to processing. To exercise any of these rights,
+email <a href="mailto:bjorn.holmthorsson@akkuro.com">bjorn.holmthorsson@akkuro.com</a>.</p>
+
+<h2>Children</h2>
+<p>Akkuro Connect is intended for adults (18+) who are employees or
+authorised contractors of Akkuro or Five Degrees. It is not directed to
+children.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy materially changes we will update the "last updated"
+date and, where required, notify users in-app on next sign-in.</p>
+
+<p><small>This policy is published at
+<code>https://fd-falcon.azurewebsites.net/api/privacy</code>.</small></p>
+</body>
+</html>

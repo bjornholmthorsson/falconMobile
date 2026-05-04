@@ -31,13 +31,16 @@ import {
   deleteTempoWorklog,
   searchJiraIssues,
   getTempoAbsenceTypes,
+  getTempoCurrentPeriod,
   getWorklogKeywordRules,
   type TempoWorklogEntry,
   type JiraIssue,
   type TempoAbsenceType,
+  type TempoPeriod,
   type WorklogKeywordRule,
 } from '../services/api';
 import { useAppStore } from '../store/appStore';
+import { isIcelandicHoliday, isWeekend } from '../utils/icelandicHolidays';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -98,6 +101,62 @@ function defaultTo(): Date {
   const d = new Date();
   d.setHours(17, 0, 0, 0);
   return d;
+}
+
+// ── range/date helpers ────────────────────────────────────────────────────────
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function parseYmd(s: string): Date {
+  // Use local-tz construction to avoid UTC-shift surprises
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+function addDays(s: string, n: number): string {
+  const d = parseYmd(s);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+
+function isoWeekStart(s: string): string {
+  // Monday-based week
+  const d = parseYmd(s);
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const diff = (dow + 6) % 7; // days since last Monday
+  d.setDate(d.getDate() - diff);
+  return ymd(d);
+}
+
+function weekDays(weekStartYmd: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStartYmd, i));
+}
+
+function periodDays(fromYmd: string, toYmd: string): string[] {
+  const out: string[] = [];
+  let cur = fromYmd;
+  let safety = 0;
+  while (cur <= toYmd && safety++ < 100) {
+    out.push(cur);
+    cur = addDays(cur, 1);
+  }
+  return out;
+}
+
+function fmtRangeLabel(fromYmd: string, toYmd: string): string {
+  const f = parseYmd(fromYmd);
+  const t = parseYmd(toYmd);
+  const sameMonth = f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear();
+  const sameYear  = f.getFullYear() === t.getFullYear();
+  if (sameMonth) {
+    return `${f.toLocaleDateString([], { month: 'short' })} ${f.getDate()}–${t.getDate()}`;
+  }
+  if (sameYear) {
+    return `${f.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${t.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+  }
+  return `${f.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} – ${t.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 // ── SwipeableCard ─────────────────────────────────────────────────────────────
@@ -165,6 +224,214 @@ const swipeStyles = StyleSheet.create({
 // ── component ─────────────────────────────────────────────────────────────────
 
 type ModalType = 'worklog' | 'absence' | null;
+type ViewMode = 'day' | 'week' | 'month';
+
+// ── WeekStrip ─────────────────────────────────────────────────────────────────
+
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function WeekStrip({
+  weekStart,
+  selectedDate,
+  dayTotals,
+  onSelectDay,
+}: {
+  weekStart: string;
+  selectedDate: string;
+  dayTotals: Map<string, number>;
+  onSelectDay: (date: string) => void;
+}) {
+  const today = todayStr();
+  const days = weekDays(weekStart);
+  return (
+    <View style={stripStyles.row}>
+      {days.map((d, i) => {
+        const total    = dayTotals.get(d) ?? 0;
+        const selected = d === selectedDate;
+        const isToday  = d === today;
+        const holiday  = isIcelandicHoliday(d);
+        const weekend  = isWeekend(d);
+        return (
+          <TouchableOpacity
+            key={d}
+            style={[
+              stripStyles.cell,
+              (weekend || holiday) && stripStyles.cellOff,
+              isToday && !selected && stripStyles.cellToday,
+              selected && stripStyles.cellSelected,
+            ]}
+            onPress={() => onSelectDay(d)}
+            activeOpacity={0.7}
+          >
+            <Text style={[stripStyles.dow, selected && stripStyles.dowSelected]}>{DAY_LETTERS[i]}</Text>
+            <Text style={[stripStyles.dayNum, selected && stripStyles.dayNumSelected]}>{parseYmd(d).getDate()}</Text>
+            <Text style={[stripStyles.dayTotal, selected && stripStyles.dayTotalSelected]}>
+              {total > 0 ? fmtDuration(total) : '–'}
+            </Text>
+            {holiday && !selected && <View style={stripStyles.holidayDot} />}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+const stripStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e5e5',
+    gap: 6,
+  },
+  cell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#f5f5f5',
+    position: 'relative',
+  },
+  cellOff:      { backgroundColor: '#f3eef0' },
+  cellSelected: { backgroundColor: '#006559' },
+  cellToday:    { borderWidth: 1, borderColor: '#006559' },
+  dow:          { fontSize: 11, color: '#888', fontWeight: '600' },
+  dowSelected:  { color: '#bfe5df' },
+  dayNum:       { fontSize: 17, color: '#111', fontWeight: '700', marginTop: 2 },
+  dayNumSelected: { color: '#fff' },
+  dayTotal:     { fontSize: 11, color: '#006559', marginTop: 4, fontWeight: '600' },
+  dayTotalSelected: { color: '#fff' },
+  holidayDot: {
+    position: 'absolute', top: 5, right: 6,
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#c2185b',
+  },
+});
+
+// ── MonthGrid ────────────────────────────────────────────────────────────────
+
+function MonthGrid({
+  from,
+  to,
+  selectedDate,
+  dayTotals,
+  onSelectDay,
+}: {
+  from: string;
+  to: string;
+  selectedDate: string;
+  dayTotals: Map<string, number>;
+  onSelectDay: (date: string) => void;
+}) {
+  const today = todayStr();
+  const days = periodDays(from, to);
+  // Monday-based weekday index of the first period day (0 = Mon, 6 = Sun).
+  // We render that many invisible cells so the period's first day lands under
+  // its real weekday column.
+  const firstDow = (parseYmd(from).getDay() + 6) % 7;
+  return (
+    <View style={gridStyles.container}>
+      <View style={gridStyles.headerRow}>
+        {DAY_LETTERS.map((l, i) => (
+          <Text key={`h-${i}`} style={gridStyles.headerCell}>{l}</Text>
+        ))}
+      </View>
+      <ScrollView style={gridStyles.scroll} contentContainerStyle={gridStyles.grid}>
+        {Array.from({ length: firstDow }).map((_, i) => (
+          <View key={`pad-${i}`} style={[gridStyles.cell, gridStyles.cellPlaceholder]} />
+        ))}
+      {days.map(d => {
+        const total    = dayTotals.get(d) ?? 0;
+        const selected = d === selectedDate;
+        const isToday  = d === today;
+        const dt       = parseYmd(d);
+        const weekend  = isWeekend(d);
+        const holiday  = isIcelandicHoliday(d);
+        return (
+          <TouchableOpacity
+            key={d}
+            style={[
+              gridStyles.cell,
+              (weekend || holiday) && gridStyles.cellOff,
+              isToday && !selected && gridStyles.cellToday,
+              selected && gridStyles.cellSelected,
+            ]}
+            onPress={() => onSelectDay(d)}
+            activeOpacity={0.75}
+          >
+            <Text style={[gridStyles.dayNum, selected && gridStyles.invText]}>{dt.getDate()}</Text>
+            {total > 0 && (
+              <View style={[gridStyles.totalPill, selected && gridStyles.totalPillSelected]}>
+                <Text style={[gridStyles.totalText, selected && gridStyles.invText]}>{fmtDuration(total)}</Text>
+              </View>
+            )}
+            {holiday && !selected && <View style={gridStyles.holidayDot} />}
+          </TouchableOpacity>
+        );
+      })}
+      </ScrollView>
+    </View>
+  );
+}
+
+const GRID_GAP = 6;
+const gridStyles = StyleSheet.create({
+  container: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
+  headerRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: GRID_GAP,
+  },
+  headerCell: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#888',
+  },
+  scroll: { maxHeight: 320 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: GRID_GAP,
+  },
+  cell: {
+    width: `${100 / 7}%`,
+    minHeight: 64,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    position: 'relative',
+    // %-width plus gap can overflow on some widths — flexBasis trick
+    flexBasis: `${100 / 7 - 2}%`,
+  } as any,
+  cellOff:      { backgroundColor: '#f3eef0' },
+  cellPlaceholder: { backgroundColor: 'transparent' },
+  cellToday:    { borderWidth: 1, borderColor: '#006559' },
+  cellSelected: { backgroundColor: '#006559' },
+  dayNum:       { fontSize: 15, color: '#111', fontWeight: '700', marginTop: 2 },
+  invText:      { color: '#fff' },
+  totalPill: {
+    marginTop: 6,
+    backgroundColor: '#e6f4f1',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  totalPillSelected: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  totalText:    { fontSize: 10, fontWeight: '700', color: '#006559' },
+  holidayDot: {
+    position: 'absolute', top: 4, right: 5,
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#c2185b',
+  },
+});
 
 export default function TimeScreen() {
   const currentUser = useAppStore(s => s.currentUser);
@@ -174,8 +441,10 @@ export default function TimeScreen() {
   const queryClient = useQueryClient();
 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr());
+  const [viewMode,     setViewMode]     = useState<ViewMode>('day');
   const [fabOpen,      setFabOpen]      = useState(false);
   const [activeModal,  setActiveModal]  = useState<ModalType>(null);
+  const lastTapRef = useRef<{ date: string; at: number }>({ date: '', at: 0 });
 
   // ── shared form state ──
   const [fromTime,  setFromTime]  = useState<Date>(defaultFrom());
@@ -207,19 +476,58 @@ export default function TimeScreen() {
     return isNaN(n) ? 0 : Math.max(0, n);
   }
 
+  // ── Tempo period (only fetched when month view is active) ──
+  const { data: tempoPeriod } = useQuery<TempoPeriod>({
+    queryKey: ['tempo-period', selectedDate],
+    queryFn:  () => getTempoCurrentPeriod(selectedDate),
+    enabled:  viewMode === 'month',
+    staleTime: 60 * 60 * 1000,
+  });
+
+  // ── Active range derived from view-mode + selectedDate ──
+  const range = React.useMemo(() => {
+    if (viewMode === 'day') return { from: selectedDate, to: selectedDate };
+    if (viewMode === 'week') {
+      const start = isoWeekStart(selectedDate);
+      return { from: start, to: addDays(start, 6) };
+    }
+    // month view: use tempoPeriod when available, else calendar month
+    if (tempoPeriod) return { from: tempoPeriod.from, to: tempoPeriod.to };
+    const d = parseYmd(selectedDate);
+    return {
+      from: ymd(new Date(d.getFullYear(), d.getMonth(), 1)),
+      to:   ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
+    };
+  }, [viewMode, selectedDate, tempoPeriod]);
+
   useFocusEffect(
     useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
-    }, [queryClient, currentUser?.id, selectedDate]),
+      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, range.from, range.to] });
+    }, [queryClient, currentUser?.id, range.from, range.to]),
   );
 
   const { data: worklogs = [], isLoading, isError, error } = useQuery<TempoWorklogEntry[]>({
-    queryKey: ['tempo', currentUser?.id, selectedDate],
-    queryFn: () => getTempoWorklogs(currentUser!.id, selectedDate, selectedDate),
-    enabled: !!currentUser,
+    queryKey: ['tempo', currentUser?.id, range.from, range.to],
+    queryFn:  () => getTempoWorklogs(currentUser!.id, range.from, range.to),
+    enabled:  !!currentUser,
     staleTime: 60 * 1000,
     retry: false,
   });
+
+  const dayWorklogs = React.useMemo(
+    () => worklogs.filter(w => w.date === selectedDate),
+    [worklogs, selectedDate],
+  );
+
+  // Per-day totals across the active range (for week strip / month grid)
+  const dayTotals = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const w of worklogs) {
+      if (!w.date) continue;
+      m.set(w.date, (m.get(w.date) ?? 0) + w.timeSpentSeconds);
+    }
+    return m;
+  }, [worklogs]);
 
   const FALLBACK_ABSENCE_TYPES: TempoAbsenceType[] = [
     { id: 1,  name: 'Holiday',              jiraKey: 'ABSENCE-1',  sortOrder: 1 },
@@ -259,7 +567,7 @@ export default function TimeScreen() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const { mutate: deleteWorklog } = useMutation({
     mutationFn: (worklogId: number) => deleteTempoWorklog(currentUser!.id, worklogId),
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] }),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id] }),
     onError:    (err: Error) => Alert.alert('Could not delete', err.message),
     onSettled:  () => setDeletingId(null),
   });
@@ -352,7 +660,7 @@ export default function TimeScreen() {
         : postTempoWorklog(currentUser!.id, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id] });
       if (saveAndNewRef.current && !editingWorklog) {
         resetForm();
         saveAndNewRef.current = false;
@@ -383,7 +691,7 @@ export default function TimeScreen() {
     onSuccess: () => {
       setActiveModal(null);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id] });
     },
     onError: (err: Error) => Alert.alert('Could not save absence', err.message),
   });
@@ -425,9 +733,30 @@ export default function TimeScreen() {
   }
 
   function changeDate(delta: number) {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + delta);
-    setSelectedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    if (viewMode === 'day') {
+      setSelectedDate(addDays(selectedDate, delta));
+      return;
+    }
+    if (viewMode === 'week') {
+      setSelectedDate(addDays(selectedDate, delta * 7));
+      return;
+    }
+    // month: jump one period back/forward by the period length when known,
+    // otherwise jump by 30 days (the next render will re-fetch the period).
+    const days = tempoPeriod
+      ? periodDays(tempoPeriod.from, tempoPeriod.to).length
+      : 30;
+    setSelectedDate(addDays(selectedDate, delta * days));
+  }
+
+  function selectDay(date: string) {
+    const now = Date.now();
+    const isDoubleTap = lastTapRef.current.date === date && now - lastTapRef.current.at < 320;
+    lastTapRef.current = { date, at: now };
+    setSelectedDate(date);
+    if (isDoubleTap && viewMode !== 'day') {
+      setViewMode('day');
+    }
   }
 
   // ── time picker shared block ──
@@ -521,15 +850,40 @@ export default function TimeScreen() {
     );
   }
 
+  const totalLabel =
+    viewMode === 'day'   ? 'Day total' :
+    viewMode === 'week'  ? 'Week total' :
+                           'Period total';
+
+  const navLabel = viewMode === 'day'
+    ? (selectedDate === todayStr() ? 'Today' : fmtDate(selectedDate))
+    : fmtRangeLabel(range.from, range.to);
+
   return (
     <View style={styles.container}>
+      {/* ── view-mode toggle ── */}
+      <View style={styles.viewToggleRow}>
+        {(['day', 'week', 'month'] as const).map(m => (
+          <TouchableOpacity
+            key={m}
+            style={[styles.viewToggleBtn, viewMode === m && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode(m)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.viewToggleText, viewMode === m && styles.viewToggleTextActive]}>
+              {m === 'day' ? 'Day' : m === 'week' ? 'Week' : 'Month'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* ── date nav ── */}
       <View style={styles.dateBar}>
         <TouchableOpacity onPress={() => changeDate(-1)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Icon name="chevron-left" size={28} color="#006559" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setSelectedDate(todayStr())}>
-          <Text style={styles.dateLabel}>{selectedDate === todayStr() ? 'Today' : fmtDate(selectedDate)}</Text>
+          <Text style={styles.dateLabel}>{navLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => changeDate(1)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Icon name="chevron-right" size={28} color="#006559" />
@@ -538,11 +892,42 @@ export default function TimeScreen() {
 
       {/* ── total ── */}
       <View style={styles.totalBar}>
-        <Text style={styles.totalLabel}>Total logged</Text>
+        <Text style={styles.totalLabel}>{totalLabel}</Text>
         <Text style={styles.totalValue}>{fmtDuration(totalSeconds)}</Text>
       </View>
 
-      {/* ── list ── */}
+      {/* ── week strip / month grid ── */}
+      {viewMode === 'week' && (
+        <WeekStrip
+          weekStart={isoWeekStart(selectedDate)}
+          selectedDate={selectedDate}
+          dayTotals={dayTotals}
+          onSelectDay={selectDay}
+        />
+      )}
+      {viewMode === 'month' && (
+        <MonthGrid
+          from={range.from}
+          to={range.to}
+          selectedDate={selectedDate}
+          dayTotals={dayTotals}
+          onSelectDay={selectDay}
+        />
+      )}
+
+      {/* ── selected-day worklogs ── */}
+      {viewMode !== 'day' && (
+        <View style={styles.dayHeaderRow}>
+          <Text style={styles.dayHeaderText}>
+            {parseYmd(selectedDate).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
+          </Text>
+          {dayWorklogs.length > 0 && (
+            <Text style={styles.dayHeaderSubtle}>
+              {fmtDuration(dayWorklogs.reduce((s, w) => s + w.timeSpentSeconds, 0))}
+            </Text>
+          )}
+        </View>
+      )}
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#006559" />
       ) : isError ? (
@@ -559,11 +944,11 @@ export default function TimeScreen() {
             </>
           )}
         </View>
-      ) : worklogs.length === 0 ? (
+      ) : dayWorklogs.length === 0 ? (
         <Text style={styles.emptyText}>No time logged for this day.</Text>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-          {worklogs.map(w => {
+          {dayWorklogs.map(w => {
             const endHhmm = endTimeStr(w.startTime, w.timeSpentSeconds);
             return (
               <SwipeableCard key={w.id} onDelete={() => confirmDelete(w)} isDeleting={deletingId === w.id}>
@@ -828,6 +1213,30 @@ export default function TimeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  viewToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#eef0f1',
+  },
+  viewToggleBtnActive: { backgroundColor: '#006559' },
+  viewToggleText:      { fontSize: 13, fontWeight: '600', color: '#666' },
+  viewToggleTextActive:{ color: '#fff' },
+  dayHeaderRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4,
+  },
+  dayHeaderText:   { fontSize: 14, fontWeight: '700', color: '#111' },
+  dayHeaderSubtle: { fontSize: 13, fontWeight: '600', color: '#006559' },
   dateBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 14,

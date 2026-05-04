@@ -416,6 +416,48 @@ export async function searchJiraIssues(
   );
 }
 
+export interface TempoPeriod {
+  from: string;
+  to: string;
+  source?: string;
+}
+
+/**
+ * Returns the Tempo timesheets period containing `on` (YYYY-MM-DD).
+ * Falls back to a calendar-month range if the backend endpoint isn't
+ * available or Tempo doesn't return a matching period.
+ */
+export async function getTempoCurrentPeriod(
+  on: string,
+  signal?: AbortSignal,
+): Promise<TempoPeriod> {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/api/tempo/periods/current?on=${on}&code=${CODE}`,
+      { signal },
+    );
+    if (res.ok) {
+      // Backend was previously serializing PascalCase by default — accept both
+      // shapes so the client works regardless of whether fd-falcon has the
+      // camelCase fix deployed yet.
+      const raw = (await res.json()) as Record<string, string>;
+      const from   = raw.from   ?? raw.From;
+      const to     = raw.to     ?? raw.To;
+      const source = raw.source ?? raw.Source;
+      if (from && to) return { from, to, source };
+    }
+  } catch {
+    /* fall through */
+  }
+  // Calendar-month fallback (also matches the backend's own fallback)
+  const d = new Date(on);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const last  = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const fmt = (x: Date) =>
+    `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { from: fmt(first), to: fmt(last), source: 'client-fallback' };
+}
+
 // ── Worklog Keyword Rules ─────────────────────────────────────────────────────
 
 export interface WorklogKeywordRule {
@@ -470,6 +512,27 @@ export async function registerUserData(
       signal,
     },
   );
+  return res.ok;
+}
+
+export interface SignInEventPayload {
+  userId: string;
+  appVersion?: string;
+  platform?: string;
+  displayName?: string;
+  department?: string;
+}
+
+export async function recordSignInEvent(
+  payload: SignInEventPayload,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/sign-in-events?code=${CODE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
   return res.ok;
 }
 

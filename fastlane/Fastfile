@@ -1,0 +1,259 @@
+require "fileutils"
+
+# Akkuro Connect — release lanes (Android + iOS).
+#
+# Single source of truth for "what testers see":
+#   release-notes/<version>.txt
+#
+# Both Play Internal testing and TestFlight pull their notes from that file.
+# bump_revision will REFUSE to bump if the notes file for the upcoming
+# version doesn't exist — keeps you from shipping silent builds.
+#
+# Common entry points:
+#   bundle exec fastlane release           # bump, build, push to BOTH stores
+#   bundle exec fastlane play_internal     # Android only (Play Internal testing)
+#   bundle exec fastlane tf_internal       # iOS only (TestFlight)
+#   bundle exec fastlane play_promote      # Internal -> Production
+#   bundle exec fastlane play_metadata     # listing copy + screenshots, no AAB
+
+ANDROID_DIR  = File.expand_path("../android", __dir__)
+GRADLE_FILE  = File.join(ANDROID_DIR, "app/build.gradle")
+PACKAGE_JSON = File.expand_path("../package.json", __dir__)
+PBXPROJ      = File.expand_path("../ios/FalconMobile.xcodeproj/project.pbxproj", __dir__)
+RELEASE_NOTES_DIR = File.expand_path("../release-notes", __dir__)
+
+AAB_PATH       = File.join(ANDROID_DIR, "app/build/outputs/bundle/release/app-release.aab")
+IOS_DIR        = File.expand_path("../ios", __dir__)
+IOS_WORKSPACE  = File.join(IOS_DIR, "FalconMobile.xcworkspace")
+IOS_SCHEME     = "FalconMobile"
+IPA_OUTPUT_DIR = File.join(IOS_DIR, "build/fastlane")
+
+JAVA_HOME    = ENV["JAVA_HOME"]    || "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+ANDROID_HOME = ENV["ANDROID_HOME"] || File.expand_path("~/Library/Android/sdk")
+
+# App Store Connect API key (shared across all Akkuro iOS apps in team CQSLJMHNZ6).
+ASC_KEY_ID    = ENV["ASC_KEY_ID"]    || "BV3AUX7W3R"
+ASC_ISSUER_ID = ENV["ASC_ISSUER_ID"] || "a0c40769-6fbc-49c5-9c20-62619aa3e000"
+ASC_KEY_FILE  = ENV["ASC_KEY_FILE"]  || File.expand_path("~/.appstoreconnect/private_keys/AuthKey_#{ASC_KEY_ID}.p8")
+
+$akkuro_bumped = false
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def current_version
+  File.read(GRADLE_FILE).match(/versionName "([^"]+)"/)[1]
+end
+
+def current_version_code
+  File.read(GRADLE_FILE).match(/versionCode (\d+)/)[1].to_i
+end
+
+def next_version_name
+  parts = current_version.split(".").map(&:to_i)
+  raise "Expected major.minor.revision, got #{current_version}" unless parts.length == 3
+  parts[2] += 1
+  parts.join(".")
+end
+
+def release_notes_path(version)
+  File.join(RELEASE_NOTES_DIR, "#{version}.txt")
+end
+
+def read_release_notes(version)
+  path = release_notes_path(version)
+  unless File.exist?(path)
+    UI.user_error! <<~MSG.strip
+      Missing release notes for #{version}.
+      Create release-notes/#{version}.txt with what testers should see, then re-run.
+      Path: #{path}
+    MSG
+  end
+  notes = File.read(path).strip
+  UI.user_error! "release-notes/#{version}.txt is empty" if notes.empty?
+  notes
+end
+
+# ── lanes ────────────────────────────────────────────────────────────────────
+
+default_platform(:android)
+
+# All lanes live at the top level (rather than in `platform :android do` /
+# `platform :ios do` blocks) so that cross-platform helpers like `release` can
+# call into both the Android and iOS pipelines without scope gymnastics.
+
+desc "Bump the patch revision across iOS, Android, and package.json. Idempotent across runs: skips if the changelog file for the current versionCode already exists (meaning a previous bump already produced this version)."
+lane :bump_revision do
+    next if $akkuro_bumped
+
+    current_name = current_version
+    current_code = current_version_code
+
+    # If we already bumped to this version in a previous run (a partial
+    # release that needs a re-upload), skip the bump. The changelog file is
+    # only created by a successful bump, so its presence is the signal.
+    existing_changelog = File.expand_path("metadata/android/en-US/changelogs/#{current_code}.txt", __dir__)
+    if File.exist?(existing_changelog)
+      $akkuro_bumped = true
+      UI.success "bump_revision: already at #{current_name} (#{current_code}); skipping bump."
+      next
+    end
+
+    next_name    = next_version_name
+    next_code    = current_code + 1
+
+    # Validate notes BEFORE touching any files. If notes are missing we want a
+    # clean working tree, not a half-bumped repo.
+    read_release_notes(next_name)
+
+    gradle = File.read(GRADLE_FILE)
+    File.write(GRADLE_FILE, gradle
+      .sub(/versionName "[^"]+"/, %(versionName "#{next_name}"))
+      .sub(/versionCode \d+/, "versionCode #{next_code}"))
+
+    pkg = File.read(PACKAGE_JSON)
+    File.write(PACKAGE_JSON, pkg.sub(/"version": "[^"]+"/, %("version": "#{next_name}")))
+
+    if File.exist?(PBXPROJ)
+      pbx = File.read(PBXPROJ)
+      old_marketing = pbx.scan(/MARKETING_VERSION = ([\d.]+);/).flatten.first
+      old_build     = pbx.scan(/CURRENT_PROJECT_VERSION = (\d+);/).flatten.first.to_i
+      pbx = pbx.gsub("MARKETING_VERSION = #{old_marketing};", "MARKETING_VERSION = #{next_name};")
+      pbx = pbx.gsub("CURRENT_PROJECT_VERSION = #{old_build};", "CURRENT_PROJECT_VERSION = #{old_build + 1};")
+      File.write(PBXPROJ, pbx)
+    end
+
+    # Mirror the notes into supply's expected location so play_internal picks
+    # them up automatically (supply uploads files at metadata/android/<lang>/changelogs/<versionCode>.txt).
+    android_changelog = File.expand_path("metadata/android/en-US/changelogs/#{next_code}.txt", __dir__)
+    FileUtils.mkdir_p(File.dirname(android_changelog))
+    FileUtils.cp(release_notes_path(next_name), android_changelog)
+
+    $akkuro_bumped = true
+    UI.success "Bumped to #{next_name} (Android versionCode #{next_code}); notes wired."
+  end
+
+  desc "Build the signed release AAB."
+  lane :build_aab do
+    sh "cd #{ANDROID_DIR.shellescape} && JAVA_HOME=#{JAVA_HOME.shellescape} ANDROID_HOME=#{ANDROID_HOME.shellescape} ./gradlew bundleRelease"
+    UI.success "AAB at #{AAB_PATH}"
+  end
+
+  desc "Bump version, build, and push to the Play Internal testing track."
+  lane :play_internal do
+    bump_revision
+    build_aab
+    upload_to_play_store(
+      track: "internal",
+      aab: AAB_PATH,
+      release_status: "draft",
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_changelogs: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+    UI.success "Pushed to Play Internal testing."
+  end
+
+  desc "Promote whatever's currently live on internal up to production."
+  lane :play_promote do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+    UI.success "Promoted internal -> production."
+  end
+
+  desc "Push only listing metadata (descriptions, changelogs) without a new AAB."
+  lane :play_metadata do
+    upload_to_play_store(
+      track: "internal",
+      version_code: current_version_code,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: false,
+      skip_upload_changelogs: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false,
+    )
+end
+
+desc "Build a signed release IPA via fastlane gym."
+lane :build_ipa do
+  FileUtils.mkdir_p(IPA_OUTPUT_DIR)
+  build_app(
+    workspace: IOS_WORKSPACE,
+    scheme: IOS_SCHEME,
+    configuration: "Release",
+    export_method: "app-store",
+    output_directory: IPA_OUTPUT_DIR,
+    clean: false,
+    silent: false,
+  )
+  UI.success "IPA at #{lane_context[SharedValues::IPA_OUTPUT_PATH]}"
+end
+
+desc "Bump version, build IPA, push to TestFlight with release notes as 'What to Test'."
+lane :tf_internal do
+  bump_revision
+  build_ipa
+  api_key = app_store_connect_api_key(
+    key_id:        ASC_KEY_ID,
+    issuer_id:     ASC_ISSUER_ID,
+    key_filepath:  ASC_KEY_FILE,
+    duration:      1200,
+    in_house:      false,
+  )
+  upload_to_testflight(
+    api_key: api_key,
+    ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
+    changelog: read_release_notes(current_version),
+    distribute_external: false,
+    notify_external_testers: false,
+    skip_waiting_for_build_processing: true,
+  )
+  UI.success "Pushed #{current_version} to TestFlight."
+end
+
+desc "Bump once, then push to BOTH Play Internal testing AND TestFlight."
+lane :release do
+  bump_revision
+  # Android first — quick path, validates the upload chain
+  build_aab
+  upload_to_play_store(
+    track: "internal",
+    aab: AAB_PATH,
+    release_status: "draft",
+    skip_upload_apk: true,
+    skip_upload_metadata: false,
+    skip_upload_changelogs: false,
+    skip_upload_images: true,
+    skip_upload_screenshots: true,
+  )
+  UI.success "Pushed to Play Internal testing."
+
+  # iOS
+  build_ipa
+  api_key = app_store_connect_api_key(
+    key_id:        ASC_KEY_ID,
+    issuer_id:     ASC_ISSUER_ID,
+    key_filepath:  ASC_KEY_FILE,
+    duration:      1200,
+    in_house:      false,
+  )
+  upload_to_testflight(
+    api_key: api_key,
+    ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
+    changelog: read_release_notes(current_version),
+    distribute_external: false,
+    notify_external_testers: false,
+    skip_waiting_for_build_processing: true,
+  )
+  UI.success "Released #{current_version}: Play Internal + TestFlight."
+end
