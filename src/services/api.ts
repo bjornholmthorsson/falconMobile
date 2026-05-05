@@ -124,7 +124,8 @@ export interface CheckinItem {
   displayName: string | null;
   department: string | null;
   locationName: string;
-  recordedAt: string;
+  checkedInAt: string;
+  checkedOutAt: string | null;
   locationLatitude: number | null;
   locationLongitude: number | null;
   locationIsPublic: boolean | null;

@@ -1,7 +1,7 @@
 /**
  * EmployeesScreen — Company Directory with card-based layout.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,7 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
   const officeFilter = useAppStore(s => s.teamOfficeFilter);
   const setOfficeFilter = useAppStore(s => s.setTeamOfficeFilter);
   const queryClient = useQueryClient();
+  const searchInputRef = useRef<TextInput>(null);
 
   function toggleOffice(office: string) {
     if (officeFilter.includes(office)) {
@@ -48,10 +49,20 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
     }
   }
 
+  // Don't fan out Graph + presence + locations until the user actually starts
+  // searching. Either: (a) typed at least 2 characters, or (b) picked one or
+  // more department filters. With nothing typed and no chip selected we stay
+  // idle and don't hit the network at all.
+  const trimmedSearch  = search.trim();
+  const hasTypedQuery  = trimmedSearch.length >= 2;
+  const hasOfficePick  = officeFilter.length > 0;
+  const searchActive   = hasTypedQuery || hasOfficePick;
+
   const { data: employees, refetch, isLoading, isRefetching } = useQuery<Employee[]>({
     queryKey: ['employees', 'all'],
     queryFn: fetchAllEmployees,
     staleTime: 10_000,
+    enabled: searchActive,
   });
 
   useEffect(() => {
@@ -65,12 +76,20 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
     }
   }, [employees, queryClient]);
 
-  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+  useFocusEffect(useCallback(() => {
+    if (searchActive) refetch();
+    // Focus the search box on tab entry. Defer one tick so the input is
+    // mounted and the navigation transition has settled — focusing earlier
+    // can be a no-op on iOS.
+    const t = setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => clearTimeout(t);
+  }, [refetch, searchActive]));
 
   useEffect(() => {
+    if (!searchActive) return;
     const id = setInterval(refetch, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [refetch]);
+  }, [refetch, searchActive]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onPullRefresh = useCallback(async () => {
@@ -96,41 +115,53 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
 
   const totalCount = employees?.length ?? 0;
 
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#006559" />
-        <Text style={styles.loadingText}>Loading team…</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <FlatList
-        data={filtered}
+        data={searchActive ? filtered : []}
         keyExtractor={item => item.userId}
         renderItem={({ item }) => (
           <EmployeeCard employee={item} onPress={() => onSelectEmployee(item)} />
         )}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor="#006559" />}
+        ListEmptyComponent={
+          searchActive
+            ? (isLoading
+                ? <ActivityIndicator size="large" color="#006559" style={{ marginTop: 28 }} />
+                : (
+                    <Text style={styles.emptyText}>
+                      {hasTypedQuery ? `No matches for "${trimmedSearch}".` : 'No team members in the selected departments.'}
+                    </Text>
+                  ))
+            : null
+        }
+        refreshControl={
+          searchActive
+            ? <RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor="#006559" />
+            : undefined
+        }
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.headingRow}>
               {isRefetching && <ActivityIndicator size="small" color="#1e1b14" />}
             </View>
             <Text style={styles.subheading}>
-              Connecting {totalCount} team members, synchronized in real-time with Teams.
+              {searchActive
+                ? (isLoading ? 'Searching…' : `Found ${filtered.length} of ${totalCount} team members`)
+                : 'Type at least 2 letters or pick a department to search.'}
             </Text>
             <View style={styles.searchWrapper}>
               <Icon name="magnify" size={20} color="#9ca3af" style={{ marginRight: 8 }} />
               <TextInput
+                ref={searchInputRef}
                 style={styles.searchInput}
                 placeholder="Search by name, role, or skill..."
                 placeholderTextColor="#9ca3af"
                 value={search}
                 onChangeText={setSearch}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="words"
               />
               {search.length > 0 && (
                 <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -187,16 +218,21 @@ function EmployeeCard({
     <View style={styles.card}>
       {/* Badge row: location left, status right */}
       <View style={styles.badgeRow}>
-        {employee.lastKnownLocation ? (
-          <View style={[
-            styles.locationBadge,
-            employee.locationChanged && (Date.now() - employee.locationChanged.getTime() > 24 * 60 * 60 * 1000)
-              ? styles.locationBadgeStale
-              : null,
-          ]}>
-            <Text style={styles.locationBadgeText}>{employee.lastKnownLocation.toUpperCase()}</Text>
-          </View>
-        ) : <View />}
+        {employee.lastKnownLocation ? (() => {
+          const stillHere = !employee.locationCheckedOutAt;
+          const stale     = employee.locationChanged && (Date.now() - employee.locationChanged.getTime() > 24 * 60 * 60 * 1000);
+          return (
+            <View style={[
+              styles.locationBadge,
+              stale ? styles.locationBadgeStale : (stillHere ? styles.locationBadgeActive : styles.locationBadgeLeft),
+            ]}>
+              <Text style={[
+                styles.locationBadgeText,
+                stale ? null : (stillHere ? styles.locationBadgeTextActive : styles.locationBadgeTextLeft),
+              ]}>{employee.lastKnownLocation.toUpperCase()}</Text>
+            </View>
+          );
+        })() : <View />}
         <View style={[styles.statusBadge, { backgroundColor: badge }]}>
           <View style={[styles.statusDot, { backgroundColor: dot }]} />
           <Text style={styles.statusLabel}>{label}</Text>
@@ -219,8 +255,23 @@ function EmployeeCard({
           {employee.title ? (
             <Text style={styles.cardTitle}>{employee.title}</Text>
           ) : null}
-          <Text style={styles.cardLocation}>
-            {employee.lastKnownLocation || employee.location}
+          <Text style={[
+            styles.cardLocation,
+            employee.lastKnownLocation && (employee.locationCheckedOutAt
+              ? styles.cardLocationLeft
+              : styles.cardLocationActive),
+          ]}>
+            {(() => {
+              if (!employee.lastKnownLocation) return employee.location;
+              const fmtT = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+              if (employee.locationCheckedOutAt) {
+                return `Left ${employee.lastKnownLocation} at ${fmtT(employee.locationCheckedOutAt)}`;
+              }
+              if (employee.locationCheckedInAt) {
+                return `${employee.lastKnownLocation}, since ${fmtT(employee.locationCheckedInAt)}`;
+              }
+              return employee.lastKnownLocation;
+            })()}
           </Text>
         </View>
       </View>
@@ -366,6 +417,8 @@ async function fetchAllEmployees(): Promise<Employee[]> {
       office,
       lastKnownLocation: loc?.location ?? '',
       locationChanged: loc ? new Date(loc.lastUpdated) : null,
+      locationCheckedInAt:  loc?.checkedInAt  ? new Date(loc.checkedInAt)  : null,
+      locationCheckedOutAt: loc?.checkedOutAt ? new Date(loc.checkedOutAt) : null,
       teamsAvailability: presence?.availability ?? 'Offline',
       teamsActivity: presence?.activity ?? '',
       statusImage: mapTeamsStatus(presence?.availability),
@@ -496,6 +549,18 @@ const styles = StyleSheet.create({
   locationBadgeStale: {
     backgroundColor: 'rgba(156,163,175,0.2)',
   },
+  locationBadgeActive: {
+    backgroundColor: 'rgba(34,197,94,0.15)',
+  },
+  locationBadgeLeft: {
+    backgroundColor: 'rgba(245,158,11,0.18)',
+  },
+  locationBadgeTextActive: {
+    color: '#15803d',
+  },
+  locationBadgeTextLeft: {
+    color: '#b45309',
+  },
   locationBadgeText: {
     fontSize: 10,
     fontWeight: '700',
@@ -561,6 +626,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#006559',
     fontWeight: '500',
+  },
+  cardLocationActive: {
+    color: '#15803d', // green — still checked in
+    fontWeight: '600',
+  },
+  cardLocationLeft: {
+    color: '#b45309', // amber — checked out
+    fontWeight: '500',
+  },
+  emptyText: {
+    textAlign: 'center', color: '#6b7280', fontSize: 14, marginTop: 28, paddingHorizontal: 24,
   },
 
   // Buttons

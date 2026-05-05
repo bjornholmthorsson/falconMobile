@@ -37,6 +37,24 @@ import {
 import { useAppStore } from '../store/appStore';
 import type { HistoricalLocation, KnownLocation } from '../models';
 
+// ── Distance helpers (kept local — no PostGIS, no extra deps) ───────────────
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 950) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(meters < 9500 ? 1 : 0)} km`;
+}
+
 export default function LocationDetailsScreen() {
   const currentUser    = useAppStore(s => s.currentUser);
   const userTokens     = useAppStore(s => s.userTokens);
@@ -50,9 +68,13 @@ export default function LocationDetailsScreen() {
   const mapRef = useRef<MapView>(null);
   const qc = useQueryClient();
 
-  // Refetch known locations every time screen comes into focus
+  // Refetch BOTH known-locations queries every time the screen comes into
+  // focus. Without invalidating the public set too, a stale snapshot can stick
+  // around after a backend change and the user sees an empty list until they
+  // hard-restart the app.
   useFocusEffect(useCallback(() => {
     qc.invalidateQueries({ queryKey: ['knownUserLocations', currentUser?.id] });
+    qc.invalidateQueries({ queryKey: ['knownLocations'] });
   }, [currentUser?.id, qc]));
 
   // Centre map on user's current GPS position when screen is focused
@@ -91,16 +113,22 @@ export default function LocationDetailsScreen() {
     });
   }, [rawHistory]);
 
-  const { data: knownUserLocations = [] } = useQuery<KnownLocation[]>({
+  const knownUserLocationsQuery = useQuery<KnownLocation[]>({
     queryKey: ['knownUserLocations', currentUser?.id],
     queryFn: () => getKnownUserLocations(currentUser!.id),
     enabled: !!currentUser,
   });
+  const knownUserLocations: KnownLocation[] = knownUserLocationsQuery.data ?? [];
 
-  const { data: allKnownLocations = [] } = useQuery<KnownLocation[]>({
+  const knownLocationsQuery = useQuery<KnownLocation[]>({
     queryKey: ['knownLocations'],
-    queryFn: getKnownLocations,
+    // Wrap the call so TanStack Query's context object (`{signal,queryKey,…}`)
+    // doesn't get passed where an AbortSignal is expected — that triggers an
+    // "undefined is not a function" inside fetch when it tries to wire abort
+    // handlers onto the wrong shape.
+    queryFn: ({ signal }) => getKnownLocations(signal),
   });
+  const allKnownLocations: KnownLocation[] = knownLocationsQuery.data ?? [];
 
   // Build a map of location name → coordinates for pinning history entries
   const locationCoordMap = useMemo(() => {
@@ -181,6 +209,70 @@ export default function LocationDetailsScreen() {
       nd.setDate(nd.getDate() + days);
       return nd;
     });
+  }
+
+  // factor < 1 zooms in (smaller delta = closer); factor > 1 zooms out.
+  // Region is tracked via onRegionChangeComplete; falls back to initialRegion.
+  function zoomBy(factor: number) {
+    const r = currentRegion ?? initialRegion;
+    const next: Region = {
+      latitude:       r.latitude,
+      longitude:      r.longitude,
+      latitudeDelta:  Math.max(0.0005, Math.min(80, r.latitudeDelta  * factor)),
+      longitudeDelta: Math.max(0.0005, Math.min(80, r.longitudeDelta * factor)),
+    };
+    mapRef.current?.animateToRegion(next, 250);
+    setCurrentRegion(next);
+  }
+
+  // ── "Find closest" — drop the user on the map at the nearest known place ──
+
+  const [findingClosest, setFindingClosest] = useState(false);
+
+  async function handleFindClosest() {
+    const granted = await requestLocationPermission();
+    if (!granted) {
+      Alert.alert('Permission denied', 'Location permission is required.');
+      return;
+    }
+    setFindingClosest(true);
+    try {
+      const pos = await getCurrentPosition();
+      const candidates = visibleLocations
+        .filter(l => l.location?.coordinates != null)
+        .map(l => ({
+          loc: l,
+          distanceM: haversineMeters(
+            pos.coords.latitude, pos.coords.longitude,
+            l.location.coordinates[0], l.location.coordinates[1],
+          ),
+        }))
+        .sort((a, b) => a.distanceM - b.distanceM);
+
+      if (candidates.length === 0) {
+        Alert.alert('No known locations', 'Add a known location first to use this.');
+        return;
+      }
+
+      const { loc, distanceM } = candidates[0];
+      // Frame both the user and the closest known location so you can see them
+      // together. Adds 30% padding around the bounding box.
+      mapRef.current?.fitToCoordinates(
+        [
+          { latitude: pos.coords.latitude,        longitude: pos.coords.longitude },
+          { latitude: loc.location.coordinates[0], longitude: loc.location.coordinates[1] },
+        ],
+        {
+          edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+          animated: true,
+        },
+      );
+      Alert.alert('Closest known location', `${loc.placeName}\n${formatDistance(distanceM)} from you.`);
+    } catch (err: any) {
+      Alert.alert('Could not find location', err?.message ?? 'Try again with location services on.');
+    } finally {
+      setFindingClosest(false);
+    }
   }
 
   async function handleSetKnownLocation() {
@@ -294,6 +386,7 @@ export default function LocationDetailsScreen() {
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton
+        onRegionChangeComplete={r => setCurrentRegion(r)}
         onLongPress={e => setPinnedCoordinate(e.nativeEvent.coordinate)}
       >
         {/* Public + user's own known locations */}
@@ -328,8 +421,30 @@ export default function LocationDetailsScreen() {
         )}
       </MapView>
 
+      {/* Zoom controls — overlaid on the right side of the map */}
+      <View style={styles.zoomStack} pointerEvents="box-none">
+        <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(0.5)} activeOpacity={0.7}>
+          <Text style={styles.zoomBtnText}>+</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(2)} activeOpacity={0.7}>
+          <Text style={styles.zoomBtnText}>−</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Controls */}
       <ScrollView style={styles.controls} contentContainerStyle={styles.controlsContent} showsVerticalScrollIndicator={false}>
+        <TouchableOpacity
+          style={styles.findClosestBtn}
+          onPress={handleFindClosest}
+          activeOpacity={0.8}
+          disabled={findingClosest}
+        >
+          {findingClosest ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.findClosestBtnText}>📍  Where I am</Text>
+          )}
+        </TouchableOpacity>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Home location</Text>
           <Text style={styles.cardValue}>{homeLocation?.placeName ?? '—'}</Text>
@@ -622,4 +737,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14, alignItems: 'center',
   },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  findClosestBtn: {
+    backgroundColor: '#006559', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center', marginBottom: 12,
+  },
+  findClosestBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  zoomStack: {
+    position: 'absolute', right: 12, top: 70,
+    gap: 8,
+  },
+  zoomBtn: {
+    width: 40, height: 40, borderRadius: 8,
+    backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  zoomBtnText: { fontSize: 22, fontWeight: '700', color: '#006559', lineHeight: 26 },
 });

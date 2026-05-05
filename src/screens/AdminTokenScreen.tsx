@@ -18,7 +18,7 @@ import type { UserToken } from '../services/api';
 import type { User } from '../models';
 import { useAppStore } from '../store/appStore';
 
-const AVAILABLE_TOKENS = ['Admin', 'AddAnnouncement', 'LunchOrders', 'KnownLocationAdmin'];
+const AVAILABLE_TOKENS = ['Admin', 'AddAnnouncement', 'LunchOrders', 'KnownLocationAdmin', 'PulseDetails'];
 
 interface Props {
   visible: boolean;
@@ -27,6 +27,18 @@ interface Props {
 
 export default function AdminTokenScreen({ visible, onClose }: Props) {
   const currentUser = useAppStore(s => s.currentUser);
+  const setUserTokens = useAppStore(s => s.setUserTokens);
+
+  // When the admin grants/revokes a token on themself, refresh the global
+  // userTokens cache so gated UI (Pulse tab's Details button, etc.) updates
+  // immediately without an app restart.
+  async function refreshSelfTokensIfApplicable(targetUserId: string) {
+    if (!currentUser || targetUserId !== currentUser.id) return;
+    try {
+      const fresh = await getUserTokens(currentUser.id);
+      setUserTokens(fresh.map(t => t.tokenName));
+    } catch { /* non-critical */ }
+  }
   const qc = useQueryClient();
 
   const [search, setSearch] = useState('');
@@ -79,13 +91,19 @@ export default function AdminTokenScreen({ visible, onClose }: Props) {
   const { mutate: grant, isPending: granting } = useMutation({
     mutationFn: (tokenName: string) =>
       grantUserToken(selectedUser!.id, tokenName, currentUser?.displayName ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['adminUserTokens', selectedUser?.id] }),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ['adminUserTokens', selectedUser?.id] });
+      if (selectedUser) await refreshSelfTokensIfApplicable(selectedUser.id);
+    },
     onError: (err: any) => Alert.alert('Error', err?.message ?? 'Failed to grant token'),
   });
 
   const { mutate: revoke } = useMutation({
     mutationFn: (tokenId: number) => revokeUserToken(selectedUser!.id, tokenId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['adminUserTokens', selectedUser?.id] }),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ['adminUserTokens', selectedUser?.id] });
+      if (selectedUser) await refreshSelfTokensIfApplicable(selectedUser.id);
+    },
     onError: (err: any) => Alert.alert('Error', err?.message ?? 'Failed to revoke token'),
   });
 

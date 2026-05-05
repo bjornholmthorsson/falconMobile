@@ -1,0 +1,8 @@
+Pulse and Team got a refresh.
+
+- Cards show "Arrived at 09:42" / "Left at 11:30" — green when here, amber when left
+- Multiple visits per day if you leave and come back
+- Team tab is search-driven now — type 2 letters or pick a department; field auto-focuses
+- Team cards show "Akkuro Office, since 09:42"
+- Pulse only appears if you've opted into check-ins
+- New "Pulse Details" admin view (token-gated): "Where I am" button + zoom on maps

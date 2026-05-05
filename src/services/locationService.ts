@@ -121,10 +121,9 @@ async function handlePositionUpdate(
   const { latitude, longitude } = position.coords;
   const locationName = await resolveLocationName(latitude, longitude, userId);
 
-  // Don't record positions that don't match a known location
-  if (locationName === 'unknown') return;
-
-  // Only post if location name changed (mirrors Xamarin logic)
+  // Post on every transition — including the move from a known place back to
+  // "unknown" — so the backend can close the open visit. Standing still inside
+  // one place is suppressed by the lastPostedLocation guard.
   if (locationName !== lastPostedLocation) {
     lastPostedLocation = locationName;
     try {
@@ -132,6 +131,21 @@ async function handlePositionUpdate(
     } catch (err) {
       console.warn('[LocationService] post failed', err);
     }
+  }
+}
+
+// Force a fresh check against current GPS — used when the app comes to the
+// foreground or when the user opens the Pulse tab. This catches the case where
+// the watcher was suspended (or not yet armed at cold start) while the user was
+// already standing inside a known location.
+export async function refreshLocation(userId: string): Promise<void> {
+  try {
+    const granted = await requestLocationPermission();
+    if (!granted) return;
+    const pos = await getCurrentPosition();
+    await handlePositionUpdate(pos, userId);
+  } catch (err) {
+    console.warn('[LocationService] refresh failed', err);
   }
 }
 

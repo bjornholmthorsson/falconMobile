@@ -22,6 +22,10 @@ export interface Employee {
   office: string;
   lastKnownLocation: string;
   locationChanged: Date | null;
+  // Visit-model fields. Populated from the latest user_location_history row
+  // (checkedInAt = arrival, checkedOutAt null = still there, set = left at that time).
+  locationCheckedInAt: Date | null;
+  locationCheckedOutAt: Date | null;
   teamsAvailability: string;
   teamsActivity: string;
   statusImage: TeamsStatus;
@@ -34,6 +38,10 @@ export interface Employee {
 }
 
 export interface UserLocation {
+  // checkedInAt + checkedOutAt come from the most recent visit row;
+  // checkedOutAt is null while the user is still at the location.
+  checkedInAt?: string;
+  checkedOutAt?: string | null;
   id: string;
   username: string;
   location: string;

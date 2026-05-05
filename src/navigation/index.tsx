@@ -56,6 +56,9 @@ const Tab = createBottomTabNavigator();
 
 function MainTabs() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  // Pulse is mutual: if you're not sharing your own check-ins, you can't see
+  // anyone else's. The tab is hidden until the user opts in via Profile.
+  const checkinEnabled = useAppStore(s => s.checkinEnabled);
 
   const EmployeesTab = useCallback(() => (
     <>
@@ -99,7 +102,9 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Team" component={EmployeesTab} />
-      <Tab.Screen name="Pulse" component={PulseScreen} options={{ headerTitle: "Today's check-ins" }} />
+      {checkinEnabled && (
+        <Tab.Screen name="Pulse" component={PulseScreen} options={{ headerTitle: "Today's check-ins" }} />
+      )}
       <Tab.Screen name="Lunch" component={LunchScreen} />
       <Tab.Screen name="Time" component={TimeScreen} />
       <Tab.Screen name="Other" component={OtherScreen} />
