@@ -1,0 +1,7 @@
+Pulse tab redesigned around "Today's check-ins".
+
+- Feed of cards showing who checked in where, when
+- Each card has the person's photo, the location, and the time
+- Tap a card to see who else is at that location today on a map
+- Add a photo when you create a known location (camera or library)
+- The original map view + home location + long-press pin moved behind the "Details" button at the top right

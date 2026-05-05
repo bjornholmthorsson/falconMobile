@@ -1,6 +1,7 @@
 /**
- * MyLocationScreen — shows the user's location history for a chosen date,
+ * LocationDetailsScreen — shows the user's location history for a chosen date,
  * a map with known location markers, and lets them set/remove a known location.
+ * Reached from PulseScreen via the "Details" button in the header.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,9 +13,15 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import {
   getUserHistory,
   postKnownLocation,
@@ -30,7 +37,7 @@ import {
 import { useAppStore } from '../store/appStore';
 import type { HistoricalLocation, KnownLocation } from '../models';
 
-export default function MyLocationScreen() {
+export default function LocationDetailsScreen() {
   const currentUser    = useAppStore(s => s.currentUser);
   const userTokens     = useAppStore(s => s.userTokens);
   const checkinEnabled = useAppStore(s => s.checkinEnabled);
@@ -215,11 +222,17 @@ export default function MyLocationScreen() {
     ]);
   }
 
-  async function saveKnownLocation(name: string, isPublic?: boolean) {
+  // ── Add-known-location modal state ──
+  const [addModalOpen,    setAddModalOpen]    = useState(false);
+  const [addName,         setAddName]         = useState('');
+  const [addPhotoB64,     setAddPhotoB64]     = useState<string | null>(null);
+  const [addIsPublic,     setAddIsPublic]     = useState(false);
+
+  async function saveKnownLocation(name: string, isPublic?: boolean, photoBase64?: string | null) {
     if (!currentUser || !pinnedCoordinate) return;
     setLoadingAdd(true);
     try {
-      await addKnownLocation(currentUser.id, name, pinnedCoordinate.longitude, pinnedCoordinate.latitude, isPublic);
+      await addKnownLocation(currentUser.id, name, pinnedCoordinate.longitude, pinnedCoordinate.latitude, isPublic, photoBase64);
       qc.invalidateQueries({ queryKey: ['knownUserLocations'] });
       qc.invalidateQueries({ queryKey: ['knownLocations'] });
       setPinnedCoordinate(null);
@@ -230,30 +243,45 @@ export default function MyLocationScreen() {
     }
   }
 
-  async function handleAddKnownLocation() {
+  function handleAddKnownLocation() {
     if (!currentUser || !pinnedCoordinate) return;
-    if (isLocationAdmin) {
-      Alert.prompt(
-        'Set known location',
-        'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Private', onPress: (name) => { if (name?.trim()) saveKnownLocation(name.trim(), false); } },
-          { text: 'Public', onPress: (name) => { if (name?.trim()) saveKnownLocation(name.trim(), true); } },
-        ],
-        'plain-text',
-      );
-    } else {
-      Alert.prompt(
-        'Set known location',
-        'Enter a name for this location (e.g. "Gym", "Doctor", "Airport")',
-        async (name) => {
-          if (!name?.trim()) return;
-          await saveKnownLocation(name.trim());
-        },
-        'plain-text',
-      );
+    setAddName('');
+    setAddPhotoB64(null);
+    setAddIsPublic(isLocationAdmin ? false : false); // private by default
+    setAddModalOpen(true);
+  }
+
+  async function pickPhoto(source: 'library' | 'camera') {
+    const opts = {
+      mediaType: 'photo' as const,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      quality: 0.7 as const,
+      includeBase64: true,
+    };
+    try {
+      const result = source === 'camera' ? await launchCamera(opts) : await launchImageLibrary(opts);
+      if (result.didCancel) return;
+      const asset = result.assets?.[0];
+      if (!asset?.base64) return;
+      const mime = asset.type ?? 'image/jpeg';
+      setAddPhotoB64(`data:${mime};base64,${asset.base64}`);
+    } catch (err: any) {
+      Alert.alert('Could not load photo', err?.message ?? 'Try again');
     }
+  }
+
+  async function submitAddLocation() {
+    const trimmed = addName.trim();
+    if (!trimmed) {
+      Alert.alert('Name required', 'Give the location a name.');
+      return;
+    }
+    setAddModalOpen(false);
+    await saveKnownLocation(trimmed, isLocationAdmin ? addIsPublic : undefined, addPhotoB64);
+    setAddName('');
+    setAddPhotoB64(null);
+    setAddIsPublic(false);
   }
 
   return (
@@ -384,6 +412,85 @@ export default function MyLocationScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* ── Add-known-location modal ── */}
+      <Modal
+        visible={addModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAddModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: '#f5f5f5' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.addModalHeader}>
+            <Text style={styles.addModalTitle}>Set known location</Text>
+            <TouchableOpacity onPress={() => setAddModalOpen(false)}>
+              <Text style={styles.addModalCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+            <Text style={styles.fieldLabel}>Name</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={addName}
+              onChangeText={setAddName}
+              placeholder='e.g. "Gym", "Doctor", "Airport"'
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+            />
+
+            <Text style={styles.fieldLabel}>Photo (optional)</Text>
+            {addPhotoB64 ? (
+              <View style={styles.photoPreviewWrap}>
+                <Image source={{ uri: addPhotoB64 }} style={styles.photoPreview} resizeMode="cover" />
+                <TouchableOpacity style={styles.photoRemoveBtn} onPress={() => setAddPhotoB64(null)}>
+                  <Text style={styles.photoRemoveBtnText}>Remove photo</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.photoButtonRow}>
+                <TouchableOpacity style={styles.photoBtn} onPress={() => pickPhoto('library')} activeOpacity={0.75}>
+                  <Text style={styles.photoBtnText}>Choose from library</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.photoBtn} onPress={() => pickPhoto('camera')} activeOpacity={0.75}>
+                  <Text style={styles.photoBtnText}>Take photo</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {isLocationAdmin && (
+              <>
+                <Text style={styles.fieldLabel}>Visibility</Text>
+                <View style={styles.visibilityRow}>
+                  <TouchableOpacity
+                    style={[styles.visibilityBtn, !addIsPublic && styles.visibilityBtnActive]}
+                    onPress={() => setAddIsPublic(false)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.visibilityBtnText, !addIsPublic && styles.visibilityBtnTextActive]}>Private</Text>
+                    <Text style={styles.visibilitySub}>Visible to you only</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.visibilityBtn, addIsPublic && styles.visibilityBtnActive]}
+                    onPress={() => setAddIsPublic(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.visibilityBtnText, addIsPublic && styles.visibilityBtnTextActive]}>Public</Text>
+                    <Text style={styles.visibilitySub}>Anyone in the org</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.saveBtn} onPress={submitAddLocation} activeOpacity={0.85}>
+              <Text style={styles.saveBtnText}>Save location</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -471,4 +578,48 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   calloutText: { fontSize: 13, fontWeight: '600', color: '#1e1b14' },
+
+  // ── add-location modal ──
+  addModalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e5e5',
+  },
+  addModalTitle:  { fontSize: 17, fontWeight: '700', color: '#111' },
+  addModalCancel: { fontSize: 15, color: '#006559', fontWeight: '600' },
+
+  fieldLabel:  { fontSize: 13, fontWeight: '600', color: '#374151', marginTop: 16, marginBottom: 6 },
+  fieldInput: {
+    backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, color: '#111', borderWidth: 1, borderColor: '#e5e5e5',
+  },
+
+  photoButtonRow: { flexDirection: 'row', gap: 10 },
+  photoBtn: {
+    flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e5e5',
+    borderRadius: 10, paddingVertical: 12, alignItems: 'center',
+  },
+  photoBtnText:    { color: '#006559', fontWeight: '600', fontSize: 13 },
+  photoPreviewWrap:{ alignItems: 'flex-start' },
+  photoPreview: {
+    width: '100%', height: 180, borderRadius: 10, backgroundColor: '#e5e7eb',
+  },
+  photoRemoveBtn:  { marginTop: 8, paddingVertical: 6 },
+  photoRemoveBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+
+  visibilityRow:   { flexDirection: 'row', gap: 10 },
+  visibilityBtn: {
+    flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: '#e5e5e5', alignItems: 'center',
+  },
+  visibilityBtnActive: { borderColor: '#006559', backgroundColor: '#e6f4f1' },
+  visibilityBtnText:   { fontSize: 14, fontWeight: '700', color: '#374151' },
+  visibilityBtnTextActive: { color: '#006559' },
+  visibilitySub:    { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+
+  saveBtn: {
+    marginTop: 28, backgroundColor: '#006559', borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

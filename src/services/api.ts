@@ -90,6 +90,7 @@ export async function addKnownLocation(
   longitude: number,
   latitude: number,
   isPublic?: boolean,
+  photoBase64?: string | null,
   signal?: AbortSignal,
 ): Promise<boolean> {
   const res = await fetch(
@@ -97,11 +98,44 @@ export async function addKnownLocation(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Name: name, Longitude: longitude, Latitude: latitude, IsPublic: isPublic }),
+      body: JSON.stringify({ Name: name, Longitude: longitude, Latitude: latitude, IsPublic: isPublic, PhotoBase64: photoBase64 ?? undefined }),
       signal,
     },
   );
   return res.ok;
+}
+
+export async function setKnownLocationPhoto(
+  placeName: string,
+  photoBase64: string | null,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/known-locations/photo?code=${CODE}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ PlaceName: placeName, PhotoBase64: photoBase64 }),
+    signal,
+  });
+  return res.ok;
+}
+
+export interface CheckinItem {
+  userId: string;
+  displayName: string | null;
+  department: string | null;
+  locationName: string;
+  recordedAt: string;
+  locationLatitude: number | null;
+  locationLongitude: number | null;
+  locationIsPublic: boolean | null;
+  locationPhotoUrl: string | null;
+}
+
+export async function getTodaysCheckins(signal?: AbortSignal): Promise<CheckinItem[]> {
+  const res = await fetch(`${BASE_URL}/api/checkins/today?code=${CODE}`, { signal });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = (await res.json()) as { items: CheckinItem[] };
+  return data.items;
 }
 
 export async function deleteKnownLocation(

@@ -48,6 +48,7 @@ export interface KnownLocation {
   };
   isPublic?: boolean;
   distance?: number;
+  photoUrl?: string | null; // data URI (base64-encoded jpeg/png)
 }
 
 export interface UserSettings {

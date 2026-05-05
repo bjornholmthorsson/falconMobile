@@ -19,7 +19,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane bump_revision
 ```
 
-Bump the patch revision across iOS, Android, and package.json. Idempotent across runs: skips if the changelog file for the current versionCode already exists (meaning a previous bump already produced this version).
+Bump the patch revision across iOS, Android, and package.json. The presence of release-notes/<next>.txt is the signal to bump; if it's missing we assume we're retrying the current version (idempotent across runs).
 
 ### build_aab
 

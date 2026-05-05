@@ -46,7 +46,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import LunchScreen from '../screens/LunchScreen';
 import TimeScreen from '../screens/TimeScreen';
 import OtherScreen from '../screens/OtherScreen';
-import MyLocationScreen from '../screens/MyLocationScreen';
+import PulseScreen from '../screens/PulseScreen';
 import type { Employee } from '../models';
 import { useLocationWatcher } from '../hooks/useLocationWatcher';
 import { useLoadCurrentUser } from '../hooks/useLoadCurrentUser';
@@ -99,7 +99,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Team" component={EmployeesTab} />
-      <Tab.Screen name="Pulse" component={MyLocationScreen} />
+      <Tab.Screen name="Pulse" component={PulseScreen} options={{ headerTitle: "Today's check-ins" }} />
       <Tab.Screen name="Lunch" component={LunchScreen} />
       <Tab.Screen name="Time" component={TimeScreen} />
       <Tab.Screen name="Other" component={OtherScreen} />

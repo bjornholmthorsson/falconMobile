@@ -81,28 +81,27 @@ default_platform(:android)
 # `platform :ios do` blocks) so that cross-platform helpers like `release` can
 # call into both the Android and iOS pipelines without scope gymnastics.
 
-desc "Bump the patch revision across iOS, Android, and package.json. Idempotent across runs: skips if the changelog file for the current versionCode already exists (meaning a previous bump already produced this version)."
+desc "Bump the patch revision across iOS, Android, and package.json. The presence of release-notes/<next>.txt is the signal to bump; if it's missing we assume we're retrying the current version (idempotent across runs)."
 lane :bump_revision do
     next if $akkuro_bumped
 
     current_name = current_version
     current_code = current_version_code
-
-    # If we already bumped to this version in a previous run (a partial
-    # release that needs a re-upload), skip the bump. The changelog file is
-    # only created by a successful bump, so its presence is the signal.
-    existing_changelog = File.expand_path("metadata/android/en-US/changelogs/#{current_code}.txt", __dir__)
-    if File.exist?(existing_changelog)
-      $akkuro_bumped = true
-      UI.success "bump_revision: already at #{current_name} (#{current_code}); skipping bump."
-      next
-    end
-
     next_name    = next_version_name
     next_code    = current_code + 1
 
-    # Validate notes BEFORE touching any files. If notes are missing we want a
-    # clean working tree, not a half-bumped repo.
+    # If the user hasn't authored notes for the NEXT version, treat this as a
+    # retry of the current version (a previous release failed mid-flight) and
+    # skip the bump. Otherwise the notes file's presence is their explicit
+    # signal that they want to ship a new version.
+    unless File.exist?(release_notes_path(next_name))
+      $akkuro_bumped = true
+      UI.success "bump_revision: no notes for #{next_name}; treating this run as a retry of #{current_name} (#{current_code})."
+      next
+    end
+
+    # Validate notes BEFORE touching any files. If notes are missing or empty
+    # we want a clean working tree, not a half-bumped repo.
     read_release_notes(next_name)
 
     gradle = File.read(GRADLE_FILE)

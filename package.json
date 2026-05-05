@@ -1,6 +1,6 @@
 {
   "name": "AkkuroConnect",
-  "version": "1.1.42",
+  "version": "1.1.43",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -25,6 +25,7 @@
     "react": "19.2.3",
     "react-native": "0.84.1",
     "react-native-app-auth": "^8.1.0",
+    "react-native-image-picker": "^8.2.1",
     "react-native-maps": "^1.27.2",
     "react-native-paper": "^5.15.0",
     "react-native-safe-area-context": "^5.7.0",
