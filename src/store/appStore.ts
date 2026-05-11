@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '../models';
+import { getJiraFavorites, putJiraFavorites } from '../services/api';
 
 const NOTIF_STORAGE_KEY = '@falcon/notifications';
 const LANG_STORAGE_KEY = '@falcon/lunchLang';
@@ -48,6 +49,16 @@ interface AppState {
   addJiraFavorite: (fav: JiraFavorite) => void;
   removeJiraFavorite: (key: string) => void;
   loadJiraFavorites: () => void;
+  hydrateJiraFavoritesFromServer: (userId: string) => Promise<void>;
+}
+
+// Persist locally + sync to server (best-effort) so favorites follow the user
+// across devices without sacrificing the instant-render local cache.
+function persistFavorites(next: JiraFavorite[], userId: string | null) {
+  AsyncStorage.setItem(JIRA_FAVS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+  if (userId) {
+    putJiraFavorites(userId, next).catch(() => {/* server unreachable — local cache still applies */});
+  }
 }
 
 export const useAppStore = create<AppState>(set => ({
@@ -105,13 +116,13 @@ export const useAppStore = create<AppState>(set => ({
     if (s.jiraFavorites.some(f => f.key === key)) return s;
     const next = [...s.jiraFavorites, { key, summary: fav.summary ?? '' }];
     while (next.length > JIRA_FAVS_MAX) next.shift();
-    AsyncStorage.setItem(JIRA_FAVS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+    persistFavorites(next, s.currentUser?.id ?? null);
     return { jiraFavorites: next };
   }),
   removeJiraFavorite: key => set(s => {
     const k = key.trim().toUpperCase();
     const next = s.jiraFavorites.filter(f => f.key !== k);
-    AsyncStorage.setItem(JIRA_FAVS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+    persistFavorites(next, s.currentUser?.id ?? null);
     return { jiraFavorites: next };
   }),
   loadJiraFavorites: () => {
@@ -128,5 +139,18 @@ export const useAppStore = create<AppState>(set => ({
         }
       } catch {}
     }).catch(() => {});
+  },
+  hydrateJiraFavoritesFromServer: async userId => {
+    try {
+      const remote = await getJiraFavorites(userId);
+      const cleaned = remote
+        .filter(f => f && typeof f.key === 'string')
+        .map(f => ({ key: f.key.toUpperCase(), summary: f.summary ?? '' }))
+        .slice(-JIRA_FAVS_MAX);
+      set({ jiraFavorites: cleaned });
+      AsyncStorage.setItem(JIRA_FAVS_STORAGE_KEY, JSON.stringify(cleaned)).catch(() => {});
+    } catch {
+      // Server unreachable — keep whatever was loaded from local cache.
+    }
   },
 }));

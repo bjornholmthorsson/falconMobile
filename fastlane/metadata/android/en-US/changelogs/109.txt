@@ -1,0 +1,6 @@
+Time-logging polish.
+
+- Favorite Jira tickets now sync across devices via the backend (with a local cache for instant load)
+- Calendar suggestions show "(N)" count, and grey-out check uses start time + duration on the current day only
+- Fixed brief flicker when switching days in month view
+- From/To time picker text is now properly visible on iPhone

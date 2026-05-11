@@ -70,6 +70,7 @@ export function useLoadCurrentUser() {
         getUserTokens(user.id)
           .then(tokens => setUserTokens(tokens.map(t => t.tokenName)))
           .catch(() => {/* tokens unavailable — no special access */});
+        useAppStore.getState().hydrateJiraFavoritesFromServer(user.id);
         return getUserSettings(user.id);
       })
       .then(settings => setCheckinEnabled(settings.checkinEnabled))

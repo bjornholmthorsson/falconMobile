@@ -533,6 +533,41 @@ export async function deleteWorklogKeywordRule(
   if (!res.ok) throw new Error(`API ${res.status}`);
 }
 
+// ── Jira favorites ──────────────────────────────────────────────────────────
+
+export interface JiraFavoriteRemote {
+  key: string;
+  summary: string;
+}
+
+export async function getJiraFavorites(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<JiraFavoriteRemote[]> {
+  return apiGet<JiraFavoriteRemote[]>(
+    `/api/user/${encodeURIComponent(userId)}/jira-favorites?code=${CODE}`,
+    signal,
+  );
+}
+
+export async function putJiraFavorites(
+  userId: string,
+  favorites: JiraFavoriteRemote[],
+  signal?: AbortSignal,
+): Promise<JiraFavoriteRemote[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/${encodeURIComponent(userId)}/jira-favorites?code=${CODE}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favorites }),
+      signal,
+    },
+  );
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<JiraFavoriteRemote[]>;
+}
+
 export async function registerUserData(
   userId: string,
   data: Partial<UserData>,

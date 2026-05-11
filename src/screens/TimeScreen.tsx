@@ -22,7 +22,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation, keepPreviousData } from '@tanstack/react-query';
 import { getCalendarEvents, type CalendarEvent } from '../services/graphService';
 import {
   getTempoWorklogs,
@@ -477,11 +477,18 @@ export default function TimeScreen() {
   }
 
   // ── Tempo period (only fetched when month view is active) ──
+  // keepPreviousData: tapping a different day re-queries with a new selectedDate
+  // key. Without a placeholder, tempoPeriod would briefly be undefined while
+  // fetching, causing `range` to fall back to calendar-month bounds and the
+  // worklogs query to refetch — which visibly flickered the cards on every
+  // row-to-row tap. Adjacent days nearly always share the same Tempo period,
+  // so the previous value is a correct placeholder.
   const { data: tempoPeriod } = useQuery<TempoPeriod>({
     queryKey: ['tempo-period', selectedDate],
     queryFn:  () => getTempoCurrentPeriod(selectedDate),
     enabled:  viewMode === 'month',
     staleTime: 60 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   // ── Active range derived from view-mode + selectedDate ──
@@ -812,6 +819,8 @@ export default function TimeScreen() {
             {showFromPicker && (
               <DateTimePicker value={fromTime} mode="time" is24Hour
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                themeVariant="light"
+                textColor="#111"
                 onChange={(_, d) => { if (Platform.OS === 'android') setShowFromPicker(false); if (d) setFromTime(d); }} />
             )}
             {Platform.OS === 'ios' && showFromPicker && (
@@ -822,6 +831,8 @@ export default function TimeScreen() {
             {showToPicker && (
               <DateTimePicker value={toTime} mode="time" is24Hour
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                themeVariant="light"
+                textColor="#111"
                 onChange={(_, d) => { if (Platform.OS === 'android') setShowToPicker(false); if (d) setToTime(d); }} />
             )}
             {Platform.OS === 'ios' && showToPicker && (
@@ -1108,11 +1119,18 @@ export default function TimeScreen() {
 
             {calendarEvents.length > 0 && (
               <>
-                <Text style={styles.fieldLabel}>Calendar suggestions</Text>
+                <Text style={styles.fieldLabel}>Calendar suggestions ({calendarEvents.length})</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.calendarScroll} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
                   {calendarEvents.map(ev => {
                     const evStart = hhmm(ev.start);
-                    const already = worklogs.some(w => w.startTime === evStart);
+                    // Match on start time AND duration, and only against worklogs
+                    // for the currently-selected day. `worklogs` can span an
+                    // entire week/month depending on the view mode, so using it
+                    // here would leak other days' entries into the gray-out check.
+                    const already = dayWorklogs.some(w =>
+                      w.startTime === evStart &&
+                      w.timeSpentSeconds === ev.durationSeconds,
+                    );
                     return (
                       <TouchableOpacity
                         key={ev.id}
