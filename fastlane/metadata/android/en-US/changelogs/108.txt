@@ -1,0 +1,7 @@
+Lunch menu refresh + behind-the-scenes hardening.
+
+- Added next week's Bragðlaukar menu (11–15 May); Thursday is Uppstigningardagur
+- "Uppstigningardagur" now shows correctly in Icelandic on the lunch screen
+- My Travel Requests list now talks to the new backend correctly
+- Travel requests, time logs and edits/deletes are scoped to your own user — fixes a bug that let one user edit or delete another user's worklog
+- Push announcements no longer arrive twice when one device is linked to two accounts
