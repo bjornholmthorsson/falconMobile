@@ -654,9 +654,9 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
     error: myRequestsErrorObj,
     refetch: refetchMyRequests,
   } = useQuery<MyTravelRequest[]>({
-    queryKey: ['myTravelRequests', jiraUsername],
-    queryFn: () => getMyTravelRequests(jiraUsername!),
-    enabled: !!jiraUsername && activeTab === 'mine' && visible,
+    queryKey: ['myTravelRequests', currentUser?.id],
+    queryFn: () => getMyTravelRequests(currentUser!.id),
+    enabled: !!currentUser && !!jiraUsername && activeTab === 'mine' && visible,
     staleTime: 60 * 1000,
   });
 
@@ -718,7 +718,7 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
         customer: customer || undefined,
         account: account ? String(account.id) : undefined,
         accountKey: account?.key || undefined,
-        reporter: jiraUsername || undefined,
+        userId: currentUser.id,
       });
 
       queryClient.invalidateQueries({ queryKey: ['myTravelRequests'] });

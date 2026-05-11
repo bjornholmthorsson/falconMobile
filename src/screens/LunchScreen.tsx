@@ -42,6 +42,7 @@ const HOLIDAY_IS: Record<string, string> = {
   'Maundy Thursday': 'Skírdagur',
   'Good Friday': 'Föstudagurinn langi',
   'Easter Monday': 'Annar í páskum',
+  'Ascension Day': 'Uppstigningardagur',
 };
 
 const UI_STRINGS: Record<string, Record<string, string>> = {

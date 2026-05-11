@@ -721,7 +721,7 @@ export interface TravelRequestPayload {
   customer?: string;
   account?: string;
   accountKey?: string;
-  reporter?: string;
+  userId: string;
 }
 
 export interface MyTravelRequest {
@@ -787,11 +787,11 @@ export async function searchTempoAccounts(
 }
 
 export async function getMyTravelRequests(
-  reporter: string,
+  userId: string,
   signal?: AbortSignal,
 ): Promise<MyTravelRequest[]> {
   return apiGet<MyTravelRequest[]>(
-    `/api/travel-request/mine?reporter=${encodeURIComponent(reporter)}&code=${CODE}`,
+    `/api/travel-request/mine?userId=${encodeURIComponent(userId)}&code=${CODE}`,
     signal,
   );
 }
