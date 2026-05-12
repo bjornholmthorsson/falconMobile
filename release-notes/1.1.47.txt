@@ -1,0 +1,3 @@
+Better error messages on time logging.
+
+- When Tempo rejects a worklog because your user isn't recognized, the alert now explains what to do (ask IT to add you to a Tempo team) instead of showing a raw API error code.

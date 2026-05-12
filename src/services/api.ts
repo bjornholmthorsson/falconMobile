@@ -389,6 +389,17 @@ export async function getTempoWorklogs(
   );
 }
 
+// Substitute a friendlier message for known Tempo errors so testers get a
+// human-readable alert instead of the raw API string. We keep the raw body
+// logged server-side so admins can still see the exact Tempo response.
+function humanizeTempoError(body: string, fallbackStatus: number): string {
+  if (!body) return `API ${fallbackStatus}`;
+  if (/worker.*User is invalid/i.test(body)) {
+    return 'Your Tempo access needs admin attention — please ask IT to add you to a Tempo team. (Worker not recognized by Tempo.)';
+  }
+  return body.slice(0, 200);
+}
+
 export async function postTempoWorklog(
   userId: string,
   entry: { date: string; startTime: string; endTime: string; timeSpentSeconds: number; issueKey: string; comment?: string },
@@ -402,7 +413,7 @@ export async function postTempoWorklog(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+    throw new Error(humanizeTempoError(body, res.status));
   }
   return true;
 }
@@ -421,7 +432,7 @@ export async function updateTempoWorklog(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(body ? body.slice(0, 200) : `API ${res.status}`);
+    throw new Error(humanizeTempoError(body, res.status));
   }
   return true;
 }
