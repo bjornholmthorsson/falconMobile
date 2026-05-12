@@ -20,6 +20,7 @@ import {
   getUserData, registerUserData, updateUserSettings, getUserSettings,
   getWorklogKeywordRules, addWorklogKeywordRule, deleteWorklogKeywordRule,
   getNotificationPreferences, setNotificationPreferences,
+  verifyJiraUsername,
   type WorklogKeywordRule, type NotificationPreferences,
 } from '../services/api';
 import AdminTokenScreen from './AdminTokenScreen';
@@ -141,6 +142,7 @@ export default function ProfileScreen() {
   const [slackId, setSlackId] = useState('');
   const [editJiraOpen, setEditJiraOpen] = useState(false);
   const [jiraUsername, setJiraUsername] = useState('');
+  const [jiraSecret,   setJiraSecret]   = useState('');
 
   // ── Personal Information form ──
   const [personalOpen, setPersonalOpen] = useState(false);
@@ -225,14 +227,19 @@ export default function ProfileScreen() {
 
   async function handleSaveJira() {
     if (!currentUser) return;
+    const username = jiraUsername.trim();
+    const secret   = jiraSecret;
+    if (!username) { Alert.alert('Required', 'Please enter your Jira username.'); return; }
+    if (!secret)   { Alert.alert('Required', 'Please enter your Jira password or API token to verify ownership.'); return; }
     setSaving(true);
     try {
-      await registerUserData(currentUser.id, { jiraUsername: jiraUsername.trim() || null });
+      const result = await verifyJiraUsername(currentUser.id, username, secret);
       qc.invalidateQueries({ queryKey: ['userData'] });
+      setJiraSecret('');
       setEditJiraOpen(false);
-      Alert.alert('Saved', 'Jira username updated.');
+      Alert.alert('Verified', `Linked to Jira account "${result.jiraUsername}".`);
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Update failed');
+      Alert.alert('Could not verify', err?.message ?? 'Verification failed');
     } finally {
       setSaving(false);
     }
@@ -685,25 +692,40 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setEditJiraOpen(false)}>
+              <TouchableOpacity onPress={() => { setEditJiraOpen(false); setJiraSecret(''); }}>
                 <Text style={styles.modalCancel}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Jira Username</Text>
-              <TouchableOpacity onPress={handleSaveJira}>
+              <Text style={styles.modalTitle}>Link Jira Account</Text>
+              <TouchableOpacity onPress={handleSaveJira} disabled={saving}>
                 {saving
                   ? <ActivityIndicator color="#006559" />
-                  : <Text style={styles.modalDone}>Save</Text>}
+                  : <Text style={styles.modalDone}>Verify</Text>}
               </TouchableOpacity>
             </View>
+            <Text style={{ color: '#6b7280', fontSize: 13, marginBottom: 12 }}>
+              We'll check your credentials against Jira to make sure you own this account. Your password is sent once for verification and never stored.
+            </Text>
             <TextInput
               style={styles.mobileInput}
               value={jiraUsername}
               onChangeText={setJiraUsername}
-              placeholder="e.g. bjornh"
+              placeholder="Jira username (e.g. bjornh)"
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
             />
+            <TextInput
+              style={[styles.mobileInput, { marginTop: 10 }]}
+              value={jiraSecret}
+              onChangeText={setJiraSecret}
+              placeholder="Jira password or API token"
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+            />
+            <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 8 }}>
+              If your Jira has two-factor authentication, paste an API token instead of your password (Jira → Profile → Personal Access Tokens).
+            </Text>
           </View>
         </View>
       </Modal>

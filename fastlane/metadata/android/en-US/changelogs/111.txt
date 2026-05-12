@@ -1,0 +1,5 @@
+Linking your Jira account is now verified.
+
+- Profile → Jira Username now asks for your Jira password or API token and checks it against Jira before saving. Stops anyone typing someone else's username and logging time on their behalf.
+- If your Jira has two-factor auth, paste a Personal Access Token instead of your password.
+- Your password is sent once for verification and never stored.

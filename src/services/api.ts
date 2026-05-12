@@ -544,6 +544,38 @@ export async function deleteWorklogKeywordRule(
   if (!res.ok) throw new Error(`API ${res.status}`);
 }
 
+// ── Jira username verification ──────────────────────────────────────────────
+
+/**
+ * Verifies the typed Jira credentials against Jira's /myself and, on success,
+ * persists the verified username to user_data. The password is sent once for
+ * verification and never stored.
+ *
+ * Throws an Error whose message is safe to show to the user (e.g. "Incorrect
+ * username or password", "Could not reach Jira", etc.).
+ */
+export async function verifyJiraUsername(
+  userId: string,
+  username: string,
+  password: string,
+  signal?: AbortSignal,
+): Promise<{ jiraUsername: string }> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/${encodeURIComponent(userId)}/jira-username/verify?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body || `Verification failed (${res.status})`);
+  }
+  return res.json() as Promise<{ jiraUsername: string }>;
+}
+
 // ── Jira favorites ──────────────────────────────────────────────────────────
 
 export interface JiraFavoriteRemote {
