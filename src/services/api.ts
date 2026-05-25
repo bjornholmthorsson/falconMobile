@@ -271,6 +271,78 @@ export async function setLunchWeekFrozen(
   return res.json() as Promise<{ id: number; frozen: boolean }>;
 }
 
+// ── Lunch menu (admin: parse + commit a new week) ───────────────────────────
+
+export interface LunchMenuTranslation {
+  lang: string;
+  categoryLabel?: string | null;
+  description?: string | null;
+}
+
+export interface LunchMenuOption {
+  category: string;       // "Meat" | "Fish" | "Vegan" | "Keto" | "Salad" | "Burger"
+  sortOrder: number;
+  translations: LunchMenuTranslation[];
+}
+
+export interface LunchMenuDay {
+  dayOfWeek: string;      // "Monday" | … | "Friday"
+  menuDate: string;       // YYYY-MM-DD
+  holiday?: string | null;
+  options: LunchMenuOption[];
+}
+
+export interface LunchMenuPreview {
+  year: number;
+  weekNumber: number;
+  restaurant?: string | null;
+  priceIsk?: number | null;
+  subsidyPct: number;
+  dateLabel?: string | null;
+  days: LunchMenuDay[];
+}
+
+export async function parseLunchMenuImage(
+  imageBase64: string,
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
+  signal?: AbortSignal,
+): Promise<LunchMenuPreview> {
+  const res = await fetch(
+    `${BASE_URL}/api/lunch-menu/parse?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64, mediaType }),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body || `API ${res.status}`);
+  }
+  return res.json() as Promise<LunchMenuPreview>;
+}
+
+export async function commitLunchMenu(
+  preview: LunchMenuPreview,
+  signal?: AbortSignal,
+): Promise<{ id: number; year: number; weekNumber: number }> {
+  const res = await fetch(
+    `${BASE_URL}/api/lunch-menu?code=${CODE}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(preview),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body || `API ${res.status}`);
+  }
+  return res.json() as Promise<{ id: number; year: number; weekNumber: number }>;
+}
+
 // ── Absences ────────────────────────────────────────────────────────────────
 
 export async function registerAbsence(

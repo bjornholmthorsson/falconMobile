@@ -16,6 +16,7 @@ import { getLunchOrdersSummary, setLunchWeekFrozen } from '../services/api';
 import type { LunchOrdersSummary } from '../services/api';
 import { useAppStore } from '../store/appStore';
 import { generateLunchOrdersXlsxBase64, lunchOrdersXlsxFilename } from '../utils/lunchOrdersXlsx';
+import AddLunchMenuScreen from './AddLunchMenuScreen';
 
 interface Props {
   visible: boolean;
@@ -67,6 +68,7 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
   const now = getISOWeek(new Date());
   const [year, setYear] = useState(now.year);
   const [week, setWeek] = useState(now.week);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isFetching, error } = useQuery<LunchOrdersSummary>({
@@ -151,10 +153,17 @@ export default function LunchOrdersScreen({ visible, onClose }: Props) {
             <Icon name="arrow-left" size={24} color="#111" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{strings.title}</Text>
-          <TouchableOpacity onPress={handleEmail} disabled={!data?.days?.length}>
-            <Icon name="email-outline" size={24} color={data?.days?.length ? '#006559' : '#d1d5db'} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => setAddMenuOpen(true)} hitSlop={8}>
+              <Icon name="plus-circle-outline" size={24} color="#006559" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleEmail} disabled={!data?.days?.length} hitSlop={8}>
+              <Icon name="email-outline" size={24} color={data?.days?.length ? '#006559' : '#d1d5db'} />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        <AddLunchMenuScreen visible={addMenuOpen} onClose={() => setAddMenuOpen(false)} />
 
         {/* Week navigator */}
         <View style={styles.weekNav}>
@@ -312,6 +321,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
   },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#111' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
 
   weekNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

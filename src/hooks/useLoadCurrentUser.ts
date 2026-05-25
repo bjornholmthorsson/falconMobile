@@ -3,7 +3,7 @@ import { AppState, Platform } from 'react-native';
 import { getMe } from '../services/graphService';
 import { isSignedIn } from '../services/authService';
 import { getUserSettings, getUserTokens, recordSignInEvent, registerUserData } from '../services/api';
-import { setupPushNotifications, setupNotificationListeners, syncDeliveredNotifications } from '../services/notificationService';
+import { setupPushNotifications, setupNotificationListeners, syncDeliveredNotifications, clearBadge } from '../services/notificationService';
 import { useAppStore } from '../store/appStore';
 import pkg from '../../package.json';
 
@@ -41,11 +41,17 @@ export function useLoadCurrentUser() {
     }
   }, []);
 
-  // Sync delivered notifications into in-app cards when app comes to foreground
+  // Sync delivered notifications into in-app cards when app comes to foreground.
+  // Also clear the icon badge — backend pins badge=1 on every push, so we reset
+  // it whenever the app becomes active.
   useEffect(() => {
     syncDeliveredNotifications();
+    clearBadge();
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') syncDeliveredNotifications();
+      if (state === 'active') {
+        syncDeliveredNotifications();
+        clearBadge();
+      }
     });
     return () => sub.remove();
   }, []);
