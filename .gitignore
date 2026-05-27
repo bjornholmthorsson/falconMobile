@@ -80,3 +80,6 @@ ios/build/fastlane/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Windows junk in play-assets
+Thumbs.db
