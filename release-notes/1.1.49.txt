@@ -1,4 +1,5 @@
-Fixes a stuck home-screen badge counter.
+Fixes a stuck home-screen badge counter, and adds an admin tool for lunch menus.
 
-- The red "1" on the app icon now clears whenever you open the app or bring it to the foreground, instead of only when you tap "Clear all notifications" in your profile.
+- The app-icon badge now clears when you open or foreground the app, not only when you tap "Clear all notifications" in your profile.
 - Notifications you've already seen no longer leave the badge stuck.
+- Admins: add a weekly lunch menu by uploading a screenshot — tap + on the Lunch Orders screen to import and review it.
