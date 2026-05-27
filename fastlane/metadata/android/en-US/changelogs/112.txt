@@ -1,0 +1,4 @@
+Fixes a stuck home-screen badge counter.
+
+- The red "1" on the app icon now clears whenever you open the app or bring it to the foreground, instead of only when you tap "Clear all notifications" in your profile.
+- Notifications you've already seen no longer leave the badge stuck.
