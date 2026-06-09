@@ -343,6 +343,67 @@ export async function commitLunchMenu(
   return res.json() as Promise<{ id: number; year: number; weekNumber: number }>;
 }
 
+// ── Lunch weeks (admin: list + delete existing weeks) ───────────────────────
+
+export interface LunchWeekSummary {
+  id: number;
+  year: number;
+  weekNumber: number;
+  restaurant?: string | null;
+  dateLabel?: string | null;
+  frozen: boolean;
+  orderCount: number;
+}
+
+export interface OrderedByPerson {
+  userId: string;
+  displayName: string;
+  orderCount: number;
+}
+
+/** Result of a delete attempt. `needsConfirmation` means people have already
+ *  ordered — call deleteLunchWeek again with force=true to delete them too. */
+export type DeleteLunchWeekResult =
+  | { status: 'deleted'; deletedOrders: number }
+  | { status: 'needsConfirmation'; orderedBy: OrderedByPerson[] };
+
+export async function listLunchWeeks(signal?: AbortSignal): Promise<LunchWeekSummary[]> {
+  const res = await fetch(`${BASE_URL}/api/lunch-weeks?code=${CODE}`, { signal });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body || `API ${res.status}`);
+  }
+  return res.json() as Promise<LunchWeekSummary[]>;
+}
+
+export async function deleteLunchWeek(
+  year: number,
+  week: number,
+  force = false,
+  signal?: AbortSignal,
+): Promise<DeleteLunchWeekResult> {
+  const res = await fetch(
+    `${BASE_URL}/api/lunch-weeks/${year}/${week}?code=${CODE}${force ? '&force=true' : ''}`,
+    { method: 'DELETE', signal },
+  );
+
+  // Read the body once; parse as JSON when possible.
+  const text = await res.text().catch(() => '');
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+
+  if (res.ok) {
+    return { status: 'deleted', deletedOrders: json?.deletedOrders ?? 0 };
+  }
+
+  // 409 with requiresConfirmation: people have already ordered.
+  if (res.status === 409 && json?.requiresConfirmation) {
+    return { status: 'needsConfirmation', orderedBy: json.orderedBy ?? [] };
+  }
+
+  throw new Error(json?.error || text || `API ${res.status}`);
+}
+
 // ── Absences ────────────────────────────────────────────────────────────────
 
 export async function registerAbsence(

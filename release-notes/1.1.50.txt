@@ -1,0 +1,6 @@
+Admins can now manage and delete lunch menus, not just add them.
+
+- Tap "Manage existing menus" on the Add lunch menu screen to see every saved week.
+- Delete a menu that isn't locked to free up that week so you can re-add it.
+- If people have already ordered, you'll see exactly who before anything is removed — confirm to delete the menu and their orders together.
+- Locked weeks stay protected and can't be deleted.

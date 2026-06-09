@@ -27,6 +27,7 @@ IOS_DIR        = File.expand_path("../ios", __dir__)
 IOS_WORKSPACE  = File.join(IOS_DIR, "FalconMobile.xcworkspace")
 IOS_SCHEME     = "FalconMobile"
 IPA_OUTPUT_DIR = File.join(IOS_DIR, "build/fastlane")
+IOS_ARCHIVE_PATH = File.join(IPA_OUTPUT_DIR, "FalconMobile.xcarchive")
 
 JAVA_HOME    = ENV["JAVA_HOME"]    || "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
 ANDROID_HOME = ENV["ANDROID_HOME"] || File.expand_path("~/Library/Android/sdk")
@@ -183,19 +184,43 @@ lane :bump_revision do
     )
 end
 
-desc "Build a signed release IPA via fastlane gym."
+desc "Build a signed release IPA: gym archives, then we export manually with the ASC API key."
 lane :build_ipa do
   FileUtils.mkdir_p(IPA_OUTPUT_DIR)
+  # Clear any stale IPA so we can unambiguously pick up the one we export below.
+  FileUtils.rm_f(Dir[File.join(IPA_OUTPUT_DIR, "*.ipa")])
+
+  # Archive with gym (this step builds/signs fine) but SKIP gym's own export.
+  # gym's -exportArchive does not pass App Store Connect auth, so with automatic
+  # signing it can't fetch the distribution provisioning profile and dies with
+  # "Error packaging up the application" (exit 64). We export manually below with
+  # the ASC API key + -allowProvisioningUpdates, which is the proven path.
   build_app(
     workspace: IOS_WORKSPACE,
     scheme: IOS_SCHEME,
     configuration: "Release",
-    export_method: "app-store",
-    output_directory: IPA_OUTPUT_DIR,
+    skip_package_ipa: true,
+    archive_path: IOS_ARCHIVE_PATH,
     clean: false,
     silent: false,
   )
-  UI.success "IPA at #{lane_context[SharedValues::IPA_OUTPUT_PATH]}"
+
+  export_opts = File.join(IOS_DIR, "ExportOptions.plist")
+  sh([
+    "xcodebuild", "-exportArchive",
+    "-archivePath",            IOS_ARCHIVE_PATH.shellescape,
+    "-exportOptionsPlist",     export_opts.shellescape,
+    "-exportPath",             IPA_OUTPUT_DIR.shellescape,
+    "-allowProvisioningUpdates",
+    "-authenticationKeyPath",     ASC_KEY_FILE.shellescape,
+    "-authenticationKeyID",       ASC_KEY_ID.shellescape,
+    "-authenticationKeyIssuerID", ASC_ISSUER_ID.shellescape,
+  ].join(" "))
+
+  ipa_path = Dir[File.join(IPA_OUTPUT_DIR, "*.ipa")].max_by { |f| File.mtime(f) }
+  UI.user_error!("Export produced no IPA in #{IPA_OUTPUT_DIR}") if ipa_path.nil?
+  lane_context[SharedValues::IPA_OUTPUT_PATH] = ipa_path
+  UI.success "IPA at #{ipa_path}"
 end
 
 desc "Bump version, build IPA, push to TestFlight with release notes as 'What to Test'."

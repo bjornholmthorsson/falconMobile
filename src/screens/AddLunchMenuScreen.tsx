@@ -25,9 +25,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   parseLunchMenuImage,
   commitLunchMenu,
+  listLunchWeeks,
+  deleteLunchWeek,
   type LunchMenuPreview,
   type LunchMenuDay,
   type LunchMenuOption,
+  type LunchWeekSummary,
 } from '../services/api';
 import { useAppStore } from '../store/appStore';
 
@@ -36,7 +39,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Stage = 'pick' | 'parsing' | 'preview' | 'committing';
+type Stage = 'pick' | 'parsing' | 'preview' | 'committing' | 'manage';
 
 const UI: Record<string, Record<string, string>> = {
   en: {
@@ -61,6 +64,22 @@ const UI: Record<string, Record<string, string>> = {
     saveFailed:     'Could not save the menu',
     confirmDiscard: 'Discard this preview?',
     saved:          'Menu saved',
+    manage:         'Manage existing menus',
+    manageTitle:    'Existing menus',
+    manageEmpty:    'No menus saved yet.',
+    manageLoadFail: 'Could not load menus',
+    locked:         'Locked',
+    orders:         'orders',
+    noOrders:       'No orders',
+    delete:         'Delete',
+    deleting:       'Deleting…',
+    deleteFailed:   'Could not delete the menu',
+    deleted:        'Menu deleted',
+    confirmDelete:  'Delete this menu?',
+    confirmDeleteBody: 'This menu has no orders. Delete it?',
+    confirmDeleteOrdersTitle: 'These people have already ordered',
+    confirmDeleteOrdersBody:  'Deleting this menu will also delete their orders. Continue?',
+    cancel:         'Cancel',
   },
   is: {
     title:          'Bæta við hádegismatseðli',
@@ -84,6 +103,22 @@ const UI: Record<string, Record<string, string>> = {
     saveFailed:     'Tókst ekki að vista matseðilinn',
     confirmDiscard: 'Henda þessari forskoðun?',
     saved:          'Matseðill vistaður',
+    manage:         'Sýsla með matseðla',
+    manageTitle:    'Skráðir matseðlar',
+    manageEmpty:    'Engir matseðlar vistaðir.',
+    manageLoadFail: 'Tókst ekki að sækja matseðla',
+    locked:         'Læst',
+    orders:         'pantanir',
+    noOrders:       'Engar pantanir',
+    delete:         'Eyða',
+    deleting:       'Eyði…',
+    deleteFailed:   'Tókst ekki að eyða matseðlinum',
+    deleted:        'Matseðli eytt',
+    confirmDelete:  'Eyða þessum matseðli?',
+    confirmDeleteBody: 'Þessi matseðill hefur engar pantanir. Eyða honum?',
+    confirmDeleteOrdersTitle: 'Þetta fólk hefur þegar pantað',
+    confirmDeleteOrdersBody:  'Ef matseðlinum er eytt eyðast pantanir þeirra líka. Halda áfram?',
+    cancel:         'Hætta við',
   },
 };
 
@@ -94,6 +129,11 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
 
   const [stage, setStage] = useState<Stage>('pick');
   const [preview, setPreview] = useState<LunchMenuPreview | null>(null);
+
+  // Manage-existing-menus state
+  const [weeks, setWeeks] = useState<LunchWeekSummary[] | null>(null);
+  const [manageError, setManageError] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   function reset() {
     setStage('pick');
@@ -106,14 +146,76 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
         strings.confirmDiscard,
         undefined,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: strings.cancel, style: 'cancel' },
           { text: strings.reject, style: 'destructive', onPress: () => { reset(); onClose(); } },
         ],
       );
       return;
     }
+    if (stage === 'manage') {
+      // Back arrow from the manage list returns to the pick screen.
+      setStage('pick');
+      return;
+    }
     reset();
     onClose();
+  }
+
+  async function openManage() {
+    setStage('manage');
+    setWeeks(null);
+    setManageError(null);
+    try {
+      setWeeks(await listLunchWeeks());
+    } catch (err: any) {
+      setManageError(err?.message ?? strings.manageLoadFail);
+    }
+  }
+
+  const weekKey = (w: LunchWeekSummary) => `${w.year}-${w.weekNumber}`;
+
+  async function runDelete(week: LunchWeekSummary, force: boolean) {
+    setDeletingKey(weekKey(week));
+    try {
+      const res = await deleteLunchWeek(week.year, week.weekNumber, force);
+
+      if (res.status === 'needsConfirmation') {
+        // People have already ordered — show who, then offer to delete them too.
+        const names = res.orderedBy.map(p => `• ${p.displayName}`).join('\n');
+        Alert.alert(
+          strings.confirmDeleteOrdersTitle,
+          `${names}\n\n${strings.confirmDeleteOrdersBody}`,
+          [
+            { text: strings.cancel, style: 'cancel' },
+            { text: strings.delete, style: 'destructive', onPress: () => runDelete(week, true) },
+          ],
+        );
+        return;
+      }
+
+      // Deleted: drop it from the list and refresh any cached views of that week.
+      setWeeks(prev => prev?.filter(w => weekKey(w) !== weekKey(week)) ?? prev);
+      queryClient.invalidateQueries({ queryKey: ['lunch-menu', week.year, week.weekNumber] });
+      queryClient.invalidateQueries({ queryKey: ['lunchOrdersSummary', week.year, week.weekNumber] });
+      Alert.alert(strings.deleted, `${week.year} · ${strings.week} ${week.weekNumber}`);
+    } catch (err: any) {
+      Alert.alert(strings.deleteFailed, err?.message ?? 'Try again');
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
+  function handleDelete(week: LunchWeekSummary) {
+    if (week.orderCount === 0) {
+      // No orders — a simple confirmation is enough.
+      Alert.alert(strings.confirmDelete, strings.confirmDeleteBody, [
+        { text: strings.cancel, style: 'cancel' },
+        { text: strings.delete, style: 'destructive', onPress: () => runDelete(week, false) },
+      ]);
+    } else {
+      // Has orders — the backend will respond with who ordered so we can confirm.
+      runDelete(week, false);
+    }
   }
 
   async function pickAndParse(source: 'library' | 'camera') {
@@ -173,7 +275,7 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
           <TouchableOpacity onPress={handleClose}>
             <Icon name="arrow-left" size={24} color="#111" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{strings.title}</Text>
+          <Text style={styles.headerTitle}>{stage === 'manage' ? strings.manageTitle : strings.title}</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -189,7 +291,21 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
               <Icon name="camera-outline" size={20} color="#006559" />
               <Text style={styles.secondaryBtnText}>{strings.pickCamera}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.manageLink} onPress={openManage}>
+              <Icon name="format-list-bulleted" size={18} color="#6b7280" />
+              <Text style={styles.manageLinkText}>{strings.manage}</Text>
+            </TouchableOpacity>
           </ScrollView>
+        )}
+
+        {stage === 'manage' && (
+          <ManageList
+            weeks={weeks}
+            error={manageError}
+            deletingKey={deletingKey}
+            strings={strings}
+            onDelete={handleDelete}
+          />
         )}
 
         {stage === 'parsing' && (
@@ -227,6 +343,101 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
         )}
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+// ── Manage existing menus ────────────────────────────────────────────────────
+
+interface ManageListProps {
+  weeks: LunchWeekSummary[] | null;
+  error: string | null;
+  deletingKey: string | null;
+  strings: Record<string, string>;
+  onDelete: (week: LunchWeekSummary) => void;
+}
+
+function ManageList({ weeks, error, deletingKey, strings, onDelete }: ManageListProps) {
+  if (error) {
+    return (
+      <View style={styles.centerBody}>
+        <Icon name="alert-circle-outline" size={40} color="#dc2626" />
+        <Text style={styles.centerText}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (weeks === null) {
+    return (
+      <View style={styles.centerBody}>
+        <ActivityIndicator color="#006559" size="large" />
+      </View>
+    );
+  }
+
+  if (weeks.length === 0) {
+    return (
+      <View style={styles.centerBody}>
+        <Icon name="silverware-fork-knife" size={40} color="#9ca3af" />
+        <Text style={styles.centerText}>{strings.manageEmpty}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.previewBody} contentContainerStyle={{ paddingBottom: 32 }}>
+      {weeks.map(week => (
+        <WeekRow
+          key={`${week.year}-${week.weekNumber}`}
+          week={week}
+          deleting={deletingKey === `${week.year}-${week.weekNumber}`}
+          strings={strings}
+          onDelete={() => onDelete(week)}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+interface WeekRowProps {
+  week: LunchWeekSummary;
+  deleting: boolean;
+  strings: Record<string, string>;
+  onDelete: () => void;
+}
+
+function WeekRow({ week, deleting, strings, onDelete }: WeekRowProps) {
+  const subtitle = week.restaurant ?? week.dateLabel ?? '';
+  return (
+    <View style={styles.weekRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.weekTitle}>{`${strings.week} ${week.weekNumber} · ${week.year}`}</Text>
+        {subtitle ? <Text style={styles.weekSubtitle}>{subtitle}</Text> : null}
+        <View style={styles.badgeRow}>
+          {week.frozen ? (
+            <View style={[styles.badge, styles.badgeLocked]}>
+              <Icon name="lock" size={12} color="#b45309" />
+              <Text style={styles.badgeLockedText}>{strings.locked}</Text>
+            </View>
+          ) : null}
+          <View style={[styles.badge, week.orderCount > 0 ? styles.badgeOrders : styles.badgeNoOrders]}>
+            <Text style={week.orderCount > 0 ? styles.badgeOrdersText : styles.badgeNoOrdersText}>
+              {week.orderCount > 0 ? `${week.orderCount} ${strings.orders}` : strings.noOrders}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {week.frozen ? (
+        // Locked is the only hard block — no delete affordance.
+        <Icon name="lock-outline" size={22} color="#9ca3af" />
+      ) : deleting ? (
+        <ActivityIndicator color="#dc2626" />
+      ) : (
+        <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} accessibilityLabel={strings.delete}>
+          <Icon name="trash-can-outline" size={22} color="#dc2626" />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -419,6 +630,31 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#006559',
   },
   secondaryBtnText: { color: '#006559', fontWeight: '700', fontSize: 15 },
+  manageLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, marginTop: 4,
+  },
+  manageLinkText: { color: '#6b7280', fontWeight: '600', fontSize: 14 },
+
+  // Manage existing menus
+  weekRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10,
+  },
+  weekTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
+  weekSubtitle: { fontSize: 13, color: '#6b7280', marginTop: 2 },
+  badgeRow: { flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' },
+  badge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  badgeLocked: { backgroundColor: '#fef3c7' },
+  badgeLockedText: { color: '#b45309', fontWeight: '700', fontSize: 12 },
+  badgeOrders: { backgroundColor: '#e6f4f1' },
+  badgeOrdersText: { color: '#006559', fontWeight: '700', fontSize: 12 },
+  badgeNoOrders: { backgroundColor: '#f3f4f6' },
+  badgeNoOrdersText: { color: '#9ca3af', fontWeight: '600', fontSize: 12 },
+  deleteBtn: { padding: 6 },
 
   // Loading / saving
   centerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
