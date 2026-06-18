@@ -278,7 +278,7 @@ export default function RegisterAbsenceScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
 
       {/* ── Header ── */}
       <Text style={styles.subtitle}>Make sure to register your absence so that your colleagues can be notified.</Text>

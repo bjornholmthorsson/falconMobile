@@ -7,12 +7,11 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDepartments, createAnnouncement, type DepartmentMapping } from '../services/api';
 import { useAppStore } from '../store/appStore';
@@ -78,8 +77,7 @@ export default function AnnouncementCreateScreen({ visible, onClose }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.container}>
+      <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Add Announcement</Text>
             <TouchableOpacity onPress={() => { reset(); onClose(); }}>
@@ -87,7 +85,7 @@ export default function AnnouncementCreateScreen({ visible, onClose }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+          <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.card}>
               <Text style={styles.label}>Title *</Text>
               <TextInput
@@ -142,8 +140,8 @@ export default function AnnouncementCreateScreen({ visible, onClose }: Props) {
               {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Post Announcement</Text>}
             </TouchableOpacity>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
+      </View>
+      <KeyboardAccessory />
     </Modal>
   );
 }

@@ -124,6 +124,8 @@ export default function EmployeesScreen({ onSelectEmployee }: Props) {
           <EmployeeCard employee={item} onPress={() => onSelectEmployee(item)} />
         )}
         contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         ListEmptyComponent={
           searchActive
             ? (isLoading

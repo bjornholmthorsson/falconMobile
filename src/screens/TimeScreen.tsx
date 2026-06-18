@@ -14,7 +14,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Animated,
   PanResponder,
@@ -22,6 +21,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient, useMutation, keepPreviousData } from '@tanstack/react-query';
 import { getCalendarEvents, type CalendarEvent } from '../services/graphService';
 import {
@@ -1010,8 +1010,8 @@ export default function TimeScreen() {
 
       {/* ══ Worklog modal ══ */}
       <Modal visible={activeModal === 'worklog'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingWorklog ? 'Edit Work' : 'Log Work'}</Text>
               <TouchableOpacity onPress={closeModal}>
@@ -1153,13 +1153,14 @@ export default function TimeScreen() {
               </>
             )}
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
+        <KeyboardAccessory />
       </Modal>
 
       {/* ══ Absence modal ══ */}
       <Modal visible={activeModal === 'absence'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Log Absence</Text>
               <TouchableOpacity onPress={closeModal}>
@@ -1221,7 +1222,8 @@ export default function TimeScreen() {
               {submittingAbsence ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Save Absence</Text>}
             </TouchableOpacity>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
+        <KeyboardAccessory />
       </Modal>
     </View>
   );

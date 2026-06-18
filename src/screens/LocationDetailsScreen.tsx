@@ -16,10 +16,9 @@ import {
   Modal,
   TextInput,
   Image,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import {
@@ -535,17 +534,14 @@ export default function LocationDetailsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setAddModalOpen(false)}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: '#f5f5f5' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
           <View style={styles.addModalHeader}>
             <Text style={styles.addModalTitle}>Set known location</Text>
             <TouchableOpacity onPress={() => setAddModalOpen(false)}>
               <Text style={styles.addModalCancel}>Cancel</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <Text style={styles.fieldLabel}>Name</Text>
             <TextInput
               style={styles.fieldInput}
@@ -604,7 +600,8 @@ export default function LocationDetailsScreen() {
               <Text style={styles.saveBtnText}>Save location</Text>
             </TouchableOpacity>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
+        <KeyboardAccessory />
       </Modal>
     </View>
   );

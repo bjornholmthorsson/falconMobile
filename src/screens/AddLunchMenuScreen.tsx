@@ -16,10 +16,9 @@ import {
   Modal,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -267,10 +266,7 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose}>
             <Icon name="arrow-left" size={24} color="#111" />
@@ -341,7 +337,8 @@ export default function AddLunchMenuScreen({ visible, onClose }: Props) {
             </TouchableOpacity>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
+      <KeyboardAccessory />
     </Modal>
   );
 }
@@ -461,7 +458,7 @@ function PreviewEditor({ preview, onChange, strings }: PreviewEditorProps) {
   }
 
   return (
-    <ScrollView style={styles.previewBody} contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.previewBody} contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       {/* Week metadata */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{preview.restaurant ?? 'Lunch menu'}</Text>

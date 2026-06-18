@@ -10,9 +10,11 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/appStore';
 import { createTravelRequest, searchJiraUsers, searchTempoAccounts, getMyTravelRequests, getTravelRequestDetail, getUserData } from '../services/api';
@@ -215,7 +217,7 @@ function ComboField({ label, value, suggestions, onChange, required, placeholder
         <Icon name="chevron-down" size={20} color="#006559" />
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="slide">
-        <View style={fieldStyles.overlay}>
+        <KeyboardAvoidingView style={fieldStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={fieldStyles.sheet}>
             <View style={fieldStyles.header}>
               <TouchableOpacity onPress={() => { setCustom(''); setOpen(false); }}>
@@ -257,7 +259,7 @@ function ComboField({ label, value, suggestions, onChange, required, placeholder
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -347,7 +349,7 @@ function UserPickerField({ label, selected, onChange }: {
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="slide">
-        <View style={fieldStyles.overlay}>
+        <KeyboardAvoidingView style={fieldStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[fieldStyles.sheet, { maxHeight: '70%' }]}>
             <View style={fieldStyles.header}>
               <TouchableOpacity onPress={() => setOpen(false)}>
@@ -408,7 +410,7 @@ function UserPickerField({ label, selected, onChange }: {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -488,7 +490,7 @@ function AccountPickerField({ label, value, onChange }: {
       )}
 
       <Modal visible={open} transparent animationType="slide">
-        <View style={fieldStyles.overlay}>
+        <KeyboardAvoidingView style={fieldStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[fieldStyles.sheet, { maxHeight: '60%' }]}>
             <View style={fieldStyles.header}>
               <TouchableOpacity onPress={() => setOpen(false)}>
@@ -533,7 +535,7 @@ function AccountPickerField({ label, value, onChange }: {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -855,7 +857,7 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
             })()}
           </ScrollView>
         ) : (
-        <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.container} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           <Text style={styles.subtitle}>
             Fill in the details below to submit a travel request. Fields marked with * are required.
           </Text>
@@ -1047,6 +1049,7 @@ export default function TravelRequestScreen({ visible, onClose }: Props) {
             ) : null}
           </View>
         </Modal>
+        <KeyboardAccessory />
       </View>
     </Modal>
   );

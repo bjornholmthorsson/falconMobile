@@ -1,0 +1,5 @@
+Easier typing across the app.
+
+- Text fields no longer hide behind the keyboard — forms now scroll to keep what you're typing in view.
+- New Done (check) button just above the keyboard: tap it to close the keyboard instead of hunting for an empty spot on screen.
+- Applies everywhere you enter text — time logging, travel requests, profile, absences, lunch menus and more — on both iOS and Android.

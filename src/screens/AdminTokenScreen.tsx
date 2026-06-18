@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { searchGraphUsers } from '../services/graphService';
 import { getUserTokens, grantUserToken, revokeUserToken } from '../services/api';
@@ -126,7 +127,7 @@ export default function AdminTokenScreen({ visible, onClose }: Props) {
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           {/* User search */}
           <Text style={styles.label}>Search user</Text>
           <View style={styles.searchBox}>
@@ -231,6 +232,7 @@ export default function AdminTokenScreen({ visible, onClose }: Props) {
           )}
         </ScrollView>
       </View>
+      <KeyboardAccessory />
     </Modal>
   );
 }

@@ -12,8 +12,11 @@ import {
   Modal,
   Linking,
   Switch,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import KeyboardAccessory from '../components/KeyboardAccessory';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getUserPhoto } from '../services/graphService';
 import {
@@ -334,7 +337,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
 
       {/* ── Profile card ── */}
       <View style={styles.profileCard}>
@@ -662,7 +665,7 @@ export default function ProfileScreen() {
 
       {/* ── Edit Slack Modal ── */}
       <Modal visible={editSlackOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setEditSlackOpen(false)}>
@@ -684,12 +687,12 @@ export default function ProfileScreen() {
               autoFocus
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Edit Jira Modal ── */}
       <Modal visible={editJiraOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => { setEditJiraOpen(false); setJiraSecret(''); }}>
@@ -727,12 +730,12 @@ export default function ProfileScreen() {
               If your Jira has two-factor authentication, paste an API token instead of your password (Jira → Profile → Personal Access Tokens).
             </Text>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Add Keyword Rule Modal ── */}
       <Modal visible={addRuleOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => { setAddRuleOpen(false); setRuleKeyword(''); setRuleJiraKey(''); }}>
@@ -766,7 +769,7 @@ export default function ProfileScreen() {
               autoCorrect={false}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Personal Information Modal ── */}
@@ -781,7 +784,7 @@ export default function ProfileScreen() {
               {saving ? <ActivityIndicator color="#006559" /> : <Text style={styles.modalDone}>Save</Text>}
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <PersonalField label="Display Name"  value={pDisplayName} onChange={setPDisplayName} />
             <PersonalField label="Mobile"        value={pMobile}      onChange={setPMobile} keyboardType="phone-pad" placeholder="+354 xxx xxxx" />
             <PersonalField label="Spouse"        value={pSpouse}      onChange={setPSpouse} />
@@ -794,6 +797,7 @@ export default function ProfileScreen() {
             <PersonalField label="Start Date"    value={pStartDate}   onChange={setPStartDate} placeholder="YYYY-MM-DD" />
           </ScrollView>
         </View>
+        <KeyboardAccessory />
       </Modal>
 
       <AdminTokenScreen visible={adminOpen} onClose={() => setAdminOpen(false)} />
