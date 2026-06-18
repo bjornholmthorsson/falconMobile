@@ -59,7 +59,7 @@ Push only listing metadata (descriptions, changelogs) without a new AAB.
 [bundle exec] fastlane build_ipa
 ```
 
-Build a signed release IPA via fastlane gym.
+Build a signed release IPA: gym archives, then we export manually with the ASC API key.
 
 ### tf_internal
 
