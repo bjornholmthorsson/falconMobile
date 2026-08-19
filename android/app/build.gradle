@@ -82,8 +82,8 @@ android {
         applicationId "com.akkuro.connect"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 115
-        versionName "1.1.52"
+        versionCode 116
+        versionName "1.1.53"
         manifestPlaceholders = [appAuthRedirectScheme: "com.falconmobile"]
     }
     signingConfigs {

@@ -1,0 +1,5 @@
+Housekeeping release - no functional changes.
+
+- The app and its backend now live under the Akkuro Connect name in our code repositories; the app itself is unchanged.
+- Rebuilt from a clean iOS and Android build to confirm the move broke nothing.
+- If anything behaves differently from 1.1.52, please report it.
