@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Akkuro Connect app icon master.
+    Green -> blue gradient: #0A8B7E (top-left) -> #0B6A93 (bottom-right),
+    chosen to sit in the Akkuro family while reading distinctly against
+    Mobile Banking's green on the same home screen.
+    Geometry is identical to the Mobile Banking master so the two icons
+    line up as a set. Render all raster sizes from this file — the previous
+    icon-1024.png was an upscaled raster and looked soft.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A8B7E"/>
+      <stop offset="1" stop-color="#0B6A93"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!--
+    Akkuro "a" path from src/assets/akkuro-logo.svg (source coord box ~180w × 170h).
+    Scale 3.4 → ~612w × 578h, centred inside 1024 with the ~17% margin
+    Apple's icon guidelines call for.
+  -->
+  <g transform="translate(206 223) scale(3.4)" fill="#ffffff" fill-rule="evenodd">
+    <path d="M138.5,33.2C126.6,12.5,106.1.6,79.6.6,35.3.6,0,39,0,86.9s35.3,86.7,79.6,86.7,47-11.9,58.9-32.6v29.2h38V3.9h-38v29.2h0ZM87.7,137.6c-28.2,0-50.3-22.3-50.3-50.8s22.1-50.3,50.3-50.3,50.8,21.7,50.8,50.3-21.7,50.8-50.8,50.8Z"/>
+  </g>
+</svg>
