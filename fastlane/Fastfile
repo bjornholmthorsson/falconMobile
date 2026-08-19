@@ -149,7 +149,11 @@ lane :bump_revision do
       skip_upload_apk: true,
       skip_upload_metadata: false,
       skip_upload_changelogs: false,
-      skip_upload_images: true,
+      # Icon + feature graphic must ride along: the AAB carried the new launcher
+      # icon on 1.1.52 but the Play *listing* icon stayed stale because this was
+      # true. Screenshots remain skipped - they are heavy and rarely change; use
+      # play_metadata when they do.
+      skip_upload_images: false,
       skip_upload_screenshots: true,
     )
     UI.success "Pushed to Play Internal testing."
