@@ -1,0 +1,6 @@
+A fresh look for the app icon.
+
+- New Akkuro Connect icon: a green-to-blue gradient, so it's easy to tell apart from Akkuro Mobile Banking on your home screen.
+- The icon is now rendered from vector at every size, so it stays sharp everywhere - the previous App Store icon was noticeably blurry.
+- No functional changes in this build.
+- If your home screen still shows the old icon, delete and reinstall the app.
