@@ -17,7 +17,9 @@ import {
   Platform,
   Animated,
   PanResponder,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -440,6 +442,7 @@ const gridStyles = StyleSheet.create({
 });
 
 export default function TimeScreen() {
+  const insets = useSafeAreaInsets();
   const currentUser = useAppStore(s => s.currentUser);
   const jiraFavorites = useAppStore(s => s.jiraFavorites);
   const addJiraFavorite = useAppStore(s => s.addJiraFavorite);
@@ -1344,13 +1347,13 @@ export default function TimeScreen() {
 
       {/* ══ Log-day-from-calendar modal ══ */}
       <Modal visible={activeModal === 'bulkCalendar'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
-        <View style={{ flex: 1 }}>
-          <ScrollView
-            style={styles.modal}
-            contentContainerStyle={{ paddingBottom: 40 }}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-          >
+        {/* Header and footer stay put; only the entry list scrolls, so the
+            hours/skipped totals and the Log button are always on screen. */}
+        <KeyboardAvoidingView
+          style={styles.bulkSheet}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.bulkHeader}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Log Day from Calendar</Text>
               <TouchableOpacity onPress={closeModal}>
@@ -1365,9 +1368,7 @@ export default function TimeScreen() {
               </Text>
             </View>
 
-            {calendarPlan.length === 0 ? (
-              <Text style={styles.emptyText}>No calendar entries for this day.</Text>
-            ) : (
+            {calendarPlan.length > 0 && (
               <>
                 <View style={styles.bulkSummary}>
                   <View style={styles.bulkSummaryCell}>
@@ -1386,186 +1387,202 @@ export default function TimeScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.fieldLabel}>Calendar entries ({calendarPlan.length})</Text>
-                {calendarPlan.map(item => {
-                  const ready    = item.status === 'ready';
-                  const selected = ready && !bulkExcluded.has(item.event.id);
-                  const failure  = bulkErrors[item.event.id];
-                  const chosen   = !!issueOverrides[item.event.id];
-                  // An issue can be picked for anything the rules could not
-                  // resolve, and re-picked for anything already chosen.
-                  const canChoose  = item.status === 'no-rule' || item.status === 'invalid-key' || chosen;
-                  const pickerOpen = pickerFor === item.event.id;
-                  const typedKey   = pickerQuery.trim().toUpperCase();
-                  return (
-                    <View key={item.event.id} style={[styles.bulkRow, !ready && styles.bulkRowSkipped]}>
-                      <View style={styles.bulkRowTop}>
-                        <TouchableOpacity
-                          style={styles.bulkRowMain}
-                          activeOpacity={ready ? 0.7 : 1}
-                          onPress={() => { if (ready) togglePlanItem(item.event.id); }}
-                        >
-                          <Icon
-                            name={ready ? (selected ? 'checkbox-marked' : 'checkbox-blank-outline') : 'minus-box-outline'}
-                            size={22}
-                            color={ready ? (selected ? '#006559' : '#9ca3af') : '#cbd5e1'}
-                          />
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={[styles.bulkSubject, !ready && styles.bulkTextMuted]} numberOfLines={2}>
-                              {item.event.subject}
-                            </Text>
-                            <Text style={styles.bulkMeta}>
-                              {item.startTime} – {item.endTime} · {fmtDuration(item.timeSpentSeconds)}
-                            </Text>
-                            <View style={styles.bulkChipRow}>
-                              {ready ? (
-                                <View style={styles.bulkKeyChip}>
-                                  <Text style={styles.bulkKeyChipText}>{item.issueKey}</Text>
-                                </View>
-                              ) : (
-                                <View style={styles.bulkReasonChip}>
-                                  <Text style={styles.bulkReasonChipText}>{statusLabel(item.status)}</Text>
-                                </View>
-                              )}
-                              {!!item.matchedKeyword && (
-                                <Text style={styles.bulkMatchHint}>matched "{item.matchedKeyword}"</Text>
-                              )}
-                              {item.source === 'subject-key' && (
-                                <Text style={styles.bulkMatchHint}>key from subject</Text>
-                              )}
-                              {item.source === 'manual' && (
-                                <Text style={styles.bulkMatchHint}>picked by you</Text>
-                              )}
-                            </View>
-                            {item.overlapsPrevious && selected && (
-                              <Text style={styles.bulkWarn}>Overlaps the previous entry</Text>
+                <Text style={styles.bulkListLabel}>Calendar entries ({calendarPlan.length})</Text>
+              </>
+            )}
+          </View>
+
+          {calendarPlan.length === 0 ? (
+            <View style={styles.bulkEmptyWrap}>
+              <Text style={styles.emptyText}>No calendar entries for this day.</Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.bulkScroll}
+              contentContainerStyle={styles.bulkScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {calendarPlan.map(item => {
+                const ready    = item.status === 'ready';
+                const selected = ready && !bulkExcluded.has(item.event.id);
+                const failure  = bulkErrors[item.event.id];
+                const chosen   = !!issueOverrides[item.event.id];
+                // An issue can be picked for anything the rules could not
+                // resolve, and re-picked for anything already chosen.
+                const canChoose  = item.status === 'no-rule' || item.status === 'invalid-key' || chosen;
+                const pickerOpen = pickerFor === item.event.id;
+                const typedKey   = pickerQuery.trim().toUpperCase();
+                return (
+                  <View key={item.event.id} style={[styles.bulkRow, !ready && styles.bulkRowSkipped]}>
+                    <View style={styles.bulkRowTop}>
+                      <TouchableOpacity
+                        style={styles.bulkRowMain}
+                        activeOpacity={ready ? 0.7 : 1}
+                        onPress={() => { if (ready) togglePlanItem(item.event.id); }}
+                      >
+                        <Icon
+                          name={ready ? (selected ? 'checkbox-marked' : 'checkbox-blank-outline') : 'minus-box-outline'}
+                          size={22}
+                          color={ready ? (selected ? '#006559' : '#9ca3af') : '#cbd5e1'}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[styles.bulkSubject, !ready && styles.bulkTextMuted]} numberOfLines={2}>
+                            {item.event.subject}
+                          </Text>
+                          <Text style={styles.bulkMeta}>
+                            {item.startTime} – {item.endTime} · {fmtDuration(item.timeSpentSeconds)}
+                          </Text>
+                          <View style={styles.bulkChipRow}>
+                            {ready ? (
+                              <View style={styles.bulkKeyChip}>
+                                <Text style={styles.bulkKeyChipText}>{item.issueKey}</Text>
+                              </View>
+                            ) : (
+                              <View style={styles.bulkReasonChip}>
+                                <Text style={styles.bulkReasonChipText}>{statusLabel(item.status)}</Text>
+                              </View>
                             )}
-                            {item.status === 'invalid-key' && !!item.issueKey && (
-                              <Text style={styles.bulkWarn}>Rule points at "{item.issueKey}"</Text>
+                            {!!item.matchedKeyword && (
+                              <Text style={styles.bulkMatchHint}>matched "{item.matchedKeyword}"</Text>
                             )}
-                            {!!failure && <Text style={styles.bulkError}>{failure}</Text>}
+                            {item.source === 'subject-key' && (
+                              <Text style={styles.bulkMatchHint}>key from subject</Text>
+                            )}
+                            {item.source === 'manual' && (
+                              <Text style={styles.bulkMatchHint}>picked by you</Text>
+                            )}
                           </View>
+                          {item.overlapsPrevious && selected && (
+                            <Text style={styles.bulkWarn}>Overlaps the previous entry</Text>
+                          )}
+                          {item.status === 'invalid-key' && !!item.issueKey && (
+                            <Text style={styles.bulkWarn}>Rule points at "{item.issueKey}"</Text>
+                          )}
+                          {!!failure && <Text style={styles.bulkError}>{failure}</Text>}
+                        </View>
+                      </TouchableOpacity>
+                      {canChoose && (
+                        <TouchableOpacity
+                          style={[styles.bulkAmendBtn, pickerOpen && styles.bulkAmendBtnActive]}
+                          onPress={() => togglePicker(item.event.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.bulkAmendText, pickerOpen && styles.bulkAmendTextActive]}>
+                            {pickerOpen ? 'Close' : chosen ? 'Change' : 'Set issue'}
+                          </Text>
                         </TouchableOpacity>
-                        {canChoose && (
+                      )}
+                    </View>
+
+                    {pickerOpen && (
+                      <View style={styles.pickerPanel}>
+                        {jiraFavorites.length > 0 && (
+                          <>
+                            <Text style={styles.pickerLabel}>Favourites</Text>
+                            <View style={styles.pickerChipWrap}>
+                              {jiraFavorites.map(f => (
+                                <TouchableOpacity
+                                  key={f.key}
+                                  style={styles.pickerChip}
+                                  onPress={() => chooseIssueFor(item.event.id, f.key)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={styles.pickerChipKey}>{f.key}</Text>
+                                  {!!f.summary && (
+                                    <Text style={styles.pickerChipSummary} numberOfLines={1}>{f.summary}</Text>
+                                  )}
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </>
+                        )}
+
+                        <Text style={styles.pickerLabel}>Or any Jira issue</Text>
+                        <TextInput
+                          style={styles.pickerInput}
+                          placeholder="e.g. INT-5 or search by name"
+                          placeholderTextColor="#aaa"
+                          value={pickerQuery}
+                          onChangeText={onPickerQueryChange}
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                        />
+                        {pickerSearching && <ActivityIndicator size="small" color="#006559" style={styles.pickerSpinner} />}
+                        {isValidJiraKey(typedKey) && (
                           <TouchableOpacity
-                            style={[styles.bulkAmendBtn, pickerOpen && styles.bulkAmendBtnActive]}
-                            onPress={() => togglePicker(item.event.id)}
+                            style={styles.pickerResultRow}
+                            onPress={() => chooseIssueFor(item.event.id, typedKey)}
                             activeOpacity={0.7}
                           >
-                            <Text style={[styles.bulkAmendText, pickerOpen && styles.bulkAmendTextActive]}>
-                              {pickerOpen ? 'Close' : chosen ? 'Change' : 'Set issue'}
-                            </Text>
+                            <Text style={styles.pickerResultKey}>{typedKey}</Text>
+                            <Text style={styles.pickerResultSummary}>use this key</Text>
+                          </TouchableOpacity>
+                        )}
+                        {pickerResults.map(r => (
+                          <TouchableOpacity
+                            key={r.key}
+                            style={styles.pickerResultRow}
+                            onPress={() => chooseIssueFor(item.event.id, r.key)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.pickerResultKey}>{r.key}</Text>
+                            <Text style={styles.pickerResultSummary} numberOfLines={1}>{r.summary}</Text>
+                          </TouchableOpacity>
+                        ))}
+                        {chosen && (
+                          <TouchableOpacity
+                            style={styles.pickerClearBtn}
+                            onPress={() => clearIssueFor(item.event.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.pickerClearText}>Remove chosen issue</Text>
                           </TouchableOpacity>
                         )}
                       </View>
+                    )}
+                  </View>
+                );
+              })}
 
-                      {pickerOpen && (
-                        <View style={styles.pickerPanel}>
-                          {jiraFavorites.length > 0 && (
-                            <>
-                              <Text style={styles.pickerLabel}>Favourites</Text>
-                              <View style={styles.pickerChipWrap}>
-                                {jiraFavorites.map(f => (
-                                  <TouchableOpacity
-                                    key={f.key}
-                                    style={styles.pickerChip}
-                                    onPress={() => chooseIssueFor(item.event.id, f.key)}
-                                    activeOpacity={0.7}
-                                  >
-                                    <Text style={styles.pickerChipKey}>{f.key}</Text>
-                                    {!!f.summary && (
-                                      <Text style={styles.pickerChipSummary} numberOfLines={1}>{f.summary}</Text>
-                                    )}
-                                  </TouchableOpacity>
-                                ))}
-                              </View>
-                            </>
-                          )}
+              {amendablePlanItems.length > 0 && (
+                <Text style={styles.bulkFootnote}>
+                  Entries without a keyword rule are never guessed. Tap "Set issue" to pick one from your favourites
+                  or search Jira, then log it with the rest. Adding a rule under Profile → Worklog Keyword Rules
+                  makes that subject resolve on its own next time.
+                </Text>
+              )}
+            </ScrollView>
+          )}
 
-                          <Text style={styles.pickerLabel}>Or any Jira issue</Text>
-                          <TextInput
-                            style={styles.pickerInput}
-                            placeholder="e.g. INT-5 or search by name"
-                            placeholderTextColor="#aaa"
-                            value={pickerQuery}
-                            onChangeText={onPickerQueryChange}
-                            autoCapitalize="characters"
-                            autoCorrect={false}
-                          />
-                          {pickerSearching && <ActivityIndicator size="small" color="#006559" style={styles.pickerSpinner} />}
-                          {isValidJiraKey(typedKey) && (
-                            <TouchableOpacity
-                              style={styles.pickerResultRow}
-                              onPress={() => chooseIssueFor(item.event.id, typedKey)}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={styles.pickerResultKey}>{typedKey}</Text>
-                              <Text style={styles.pickerResultSummary}>use this key</Text>
-                            </TouchableOpacity>
-                          )}
-                          {pickerResults.map(r => (
-                            <TouchableOpacity
-                              key={r.key}
-                              style={styles.pickerResultRow}
-                              onPress={() => chooseIssueFor(item.event.id, r.key)}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={styles.pickerResultKey}>{r.key}</Text>
-                              <Text style={styles.pickerResultSummary} numberOfLines={1}>{r.summary}</Text>
-                            </TouchableOpacity>
-                          ))}
-                          {chosen && (
-                            <TouchableOpacity
-                              style={styles.pickerClearBtn}
-                              onPress={() => clearIssueFor(item.event.id)}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={styles.pickerClearText}>Remove chosen issue</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
-
-                {amendablePlanItems.length > 0 && (
-                  <Text style={styles.bulkFootnote}>
-                    Entries without a keyword rule are never guessed. Tap "Set issue" to pick one from your favourites
-                    or search Jira, then log it with the rest. Adding a rule under Profile → Worklog Keyword Rules
-                    makes that subject resolve on its own next time.
+          {calendarPlan.length > 0 && (
+            <View style={[styles.bulkFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  (submittingBulk || selectedPlanItems.length === 0) && { opacity: 0.6 },
+                ]}
+                onPress={() => submitBulk()}
+                disabled={submittingBulk || selectedPlanItems.length === 0}
+                activeOpacity={0.85}
+              >
+                {submittingBulk ? (
+                  <View style={styles.bulkProgressRow}>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={styles.submitBtnText}>
+                      {bulkProgress ? `Logging ${Math.min(bulkProgress.done + 1, bulkProgress.total)} of ${bulkProgress.total}…` : 'Logging…'}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    {selectedPlanItems.length === 0
+                      ? 'Nothing to log'
+                      : `Log ${selectedPlanItems.length} ${selectedPlanItems.length === 1 ? 'entry' : 'entries'} · ${fmtDuration(selectedPlanSeconds)}`}
                   </Text>
                 )}
-
-                <TouchableOpacity
-                  style={[
-                    styles.submitBtn,
-                    { marginTop: 24 },
-                    (submittingBulk || selectedPlanItems.length === 0) && { opacity: 0.6 },
-                  ]}
-                  onPress={() => submitBulk()}
-                  disabled={submittingBulk || selectedPlanItems.length === 0}
-                  activeOpacity={0.85}
-                >
-                  {submittingBulk ? (
-                    <View style={styles.bulkProgressRow}>
-                      <ActivityIndicator color="#fff" />
-                      <Text style={styles.submitBtnText}>
-                        {bulkProgress ? `Logging ${Math.min(bulkProgress.done + 1, bulkProgress.total)} of ${bulkProgress.total}…` : 'Logging…'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.submitBtnText}>
-                      {selectedPlanItems.length === 0
-                        ? 'Nothing to log'
-                        : `Log ${selectedPlanItems.length} ${selectedPlanItems.length === 1 ? 'entry' : 'entries'} · ${fmtDuration(selectedPlanSeconds)}`}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </ScrollView>
-        </View>
+              </TouchableOpacity>
+            </View>
+          )}
+        </KeyboardAvoidingView>
         <KeyboardAccessory />
       </Modal>
 
@@ -1830,7 +1847,22 @@ const styles = StyleSheet.create({
   calendarCardDurationTextDisabled: { color: '#9ca3af' },
   calendarCardLoggedLabel:  { fontSize: 11, fontWeight: '600', color: '#9ca3af', marginTop: 6 },
 
-  // bulk calendar import
+  // bulk calendar import — frozen header / scrolling list / frozen footer
+  bulkSheet:  { flex: 1, backgroundColor: '#f5f5f5' },
+  bulkHeader: {
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1, borderBottomColor: '#e5e5e5',
+  },
+  bulkListLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 16 },
+  bulkScroll:        { flex: 1 },
+  bulkScrollContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 24 },
+  bulkEmptyWrap:     { flex: 1 },
+  bulkFooter: {
+    paddingHorizontal: 20, paddingTop: 12,
+    backgroundColor: '#fff',
+    borderTopWidth: 1, borderTopColor: '#e5e5e5',
+  },
   bulkSummary: {
     flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12,
     borderWidth: 1, borderColor: '#e5e5e5',
