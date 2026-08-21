@@ -1,0 +1,6 @@
+Fixes and polish for logging a day from your calendar.
+
+- Amending an entry no longer opens a screen that shuts itself: pick the Jira issue right in the list, from your favourites or by searching.
+- The hours and skipped totals, and the Log button, now stay put while the entries scroll.
+- Month view shows the last week of the period in full instead of tucking it behind the day list.
+- The "Log Day from Calendar" button no longer has its label cut off.
