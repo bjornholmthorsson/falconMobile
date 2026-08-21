@@ -1,0 +1,6 @@
+Log a whole day of hours from your calendar.
+
+- New "Log Day from Calendar" option on the + button in Time: it reads every calendar entry for the day, matches each to a Jira issue, and writes them all at once.
+- Review before it writes: tick entries off, see the matched issue on each, get warned about overlaps.
+- Entries with no matching keyword rule are skipped, never guessed - tap Amend to fill one in by hand.
+- Better keyword matching; entries already on your timesheet are left alone.
