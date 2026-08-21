@@ -410,7 +410,7 @@ const gridStyles = StyleSheet.create({
   },
   cell: {
     width: `${100 / 7}%`,
-    minHeight: 64,
+    minHeight: 54,
     paddingVertical: 6,
     paddingHorizontal: 4,
     alignItems: 'center',
