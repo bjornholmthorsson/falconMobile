@@ -146,6 +146,10 @@ lane :bump_revision do
       track: "internal",
       aab: AAB_PATH,
       release_status: "draft",
+      # Without this, supply leaves the release name alone and Play keeps
+      # whatever the previous internal draft was called — 1.2.0 (117) landed
+      # under the stale label "1.1.52" in the console.
+      version_name: current_version,
       skip_upload_apk: true,
       skip_upload_metadata: false,
       skip_upload_changelogs: false,
@@ -258,10 +262,13 @@ lane :release do
     track: "internal",
     aab: AAB_PATH,
     release_status: "draft",
+    version_name: current_version,
     skip_upload_apk: true,
     skip_upload_metadata: false,
     skip_upload_changelogs: false,
-    skip_upload_images: true,
+    # Kept in step with play_internal (8177e9b): the listing icon goes stale if
+    # only the AAB carries new artwork.
+    skip_upload_images: false,
     skip_upload_screenshots: true,
   )
   UI.success "Pushed to Play Internal testing."
