@@ -344,7 +344,7 @@ function MonthGrid({
           <Text key={`h-${i}`} style={gridStyles.headerCell}>{l}</Text>
         ))}
       </View>
-      <ScrollView style={gridStyles.scroll} contentContainerStyle={gridStyles.grid}>
+      <View style={gridStyles.grid}>
         {Array.from({ length: firstDow }).map((_, i) => (
           <View key={`pad-${i}`} style={[gridStyles.cell, gridStyles.cellPlaceholder]} />
         ))}
@@ -377,7 +377,7 @@ function MonthGrid({
           </TouchableOpacity>
         );
       })}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -399,7 +399,6 @@ const gridStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#888',
   },
-  scroll: { maxHeight: 320 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
