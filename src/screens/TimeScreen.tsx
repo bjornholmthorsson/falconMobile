@@ -1171,7 +1171,7 @@ export default function TimeScreen() {
               <View style={[styles.fabOptionIcon, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
                 <Icon name="calendar-import" size={22} color="#2563eb" />
               </View>
-              <View style={{ flex: 1 }}>
+              <View>
                 <Text style={styles.fabOptionText}>Log Day from Calendar</Text>
                 {calendarEvents.length > 0 && (
                   <Text style={styles.fabOptionSub}>
