@@ -41,6 +41,13 @@ import {
 } from '../services/api';
 import { useAppStore } from '../store/appStore';
 import { isIcelandicHoliday, isWeekend } from '../utils/icelandicHolidays';
+import {
+  buildCalendarWorklogPlan,
+  knownProjectsFrom,
+  resolveIssueKey,
+  statusLabel,
+  type CalendarWorklogPlanItem,
+} from '../utils/calendarWorklogs';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -223,7 +230,7 @@ const swipeStyles = StyleSheet.create({
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-type ModalType = 'worklog' | 'absence' | null;
+type ModalType = 'worklog' | 'absence' | 'bulkCalendar' | null;
 type ViewMode = 'day' | 'week' | 'month';
 
 // ── WeekStrip ─────────────────────────────────────────────────────────────────
@@ -561,6 +568,49 @@ export default function TimeScreen() {
     staleTime: 60 * 1000,
   });
 
+  // ── bulk calendar import ──
+  // Events the user has un-ticked in the preview, and per-event failures from
+  // the last run (keyed by calendar event id).
+  const [bulkExcluded, setBulkExcluded] = useState<Set<string>>(new Set());
+  const [bulkErrors,   setBulkErrors]   = useState<Record<string, string>>({});
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Projects the user demonstrably books to. An issue key spotted in a
+  // calendar subject is only trusted when its project is in here, so a subject
+  // like "COVID-19 briefing" is never mistaken for an issue key.
+  const knownProjects = React.useMemo(
+    () => knownProjectsFrom(keywordRules, [
+      ...jiraFavorites.map(f => f.key),
+      ...worklogs.map(w => w.issueKey),
+    ]),
+    [keywordRules, jiraFavorites, worklogs],
+  );
+
+  const calendarPlan = React.useMemo(
+    () => buildCalendarWorklogPlan({
+      events:   calendarEvents,
+      rules:    keywordRules,
+      existing: dayWorklogs,
+      knownProjects,
+    }),
+    [calendarEvents, keywordRules, dayWorklogs, knownProjects],
+  );
+
+  const readyPlanItems    = calendarPlan.filter(p => p.status === 'ready');
+  const selectedPlanItems = readyPlanItems.filter(p => !bulkExcluded.has(p.event.id));
+  const skippedPlanItems  = calendarPlan.filter(p => p.status !== 'ready');
+  const amendablePlanItems = calendarPlan.filter(p => p.status === 'no-rule' || p.status === 'invalid-key');
+  const selectedPlanSeconds = selectedPlanItems.reduce((sum, p) => sum + p.timeSpentSeconds, 0);
+
+  function togglePlanItem(eventId: string) {
+    setBulkExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }
+
   const { data: absenceTypes, isLoading: absenceTypesLoading } = useQuery<TempoAbsenceType[]>({
     queryKey: ['tempo-absence-types'],
     queryFn:  getTempoAbsenceTypes,
@@ -625,8 +675,13 @@ export default function TimeScreen() {
   function openModal(type: ModalType) {
     resetForm();
     setFabOpen(false);
-    if (type === 'worklog') {
+    if (type === 'worklog' || type === 'bulkCalendar') {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
+    }
+    if (type === 'bulkCalendar') {
+      setBulkExcluded(new Set());
+      setBulkErrors({});
+      setBulkProgress(null);
     }
     setActiveModal(type);
   }
@@ -703,17 +758,84 @@ export default function TimeScreen() {
     onError: (err: Error) => Alert.alert('Could not save absence', err.message),
   });
 
+  // ── bulk calendar submit ──
+  // Posted one at a time on purpose: Tempo rejects the whole batch on a single
+  // bad entry, and a per-entry loop lets a failure be reported against the row
+  // it came from while the rest of the day still lands.
+  const { mutate: submitBulk, isPending: submittingBulk } = useMutation({
+    mutationFn: async () => {
+      const items = selectedPlanItems;
+      if (!items.length) throw new Error('Nothing selected to log');
+      const failures: { id: string; message: string }[] = [];
+      setBulkErrors({});
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        setBulkProgress({ done: i, total: items.length });
+        try {
+          await postTempoWorklog(currentUser!.id, {
+            date:             selectedDate,
+            startTime:        item.startTime,
+            endTime:          item.endTime,
+            timeSpentSeconds: item.timeSpentSeconds,
+            issueKey:         item.issueKey!,
+            comment:          item.comment,
+          });
+        } catch (err) {
+          failures.push({ id: item.event.id, message: (err as Error).message });
+        }
+      }
+      setBulkProgress({ done: items.length, total: items.length });
+      return { attempted: items.length, failures };
+    },
+    onSuccess: ({ attempted, failures }) => {
+      queryClient.invalidateQueries({ queryKey: ['tempo', currentUser?.id] });
+      setBulkErrors(Object.fromEntries(failures.map(f => [f.id, f.message])));
+      const posted = attempted - failures.length;
+      if (failures.length === 0) {
+        setActiveModal(null);
+        resetForm();
+        const skipped = skippedPlanItems.length;
+        Alert.alert(
+          'Day logged',
+          `${posted} ${posted === 1 ? 'entry' : 'entries'} written to Tempo.` +
+            (skipped > 0 ? `\n\n${skipped} calendar ${skipped === 1 ? 'entry was' : 'entries were'} skipped — amend those by hand.` : ''),
+        );
+      } else {
+        Alert.alert(
+          'Some entries could not be logged',
+          `${posted} of ${attempted} written. The failed rows stay in the list with the reason.`,
+        );
+      }
+    },
+    onError:   (err: Error) => Alert.alert('Could not log the day', err.message),
+    onSettled: () => setBulkProgress(null),
+  });
+
   function applyCalendarEvent(event: CalendarEvent) {
+    setTimeMode('fromto');
     setFromTime(event.start);
     setToTime(event.end);
     setComment(event.subject);
-    const subjectLower = event.subject.toLowerCase();
-    const match = keywordRules.find(r => subjectLower.includes(r.keyword.toLowerCase()));
+    // Same resolver the bulk import uses, so a subject resolves identically
+    // whether it is tapped one at a time or logged with the whole day.
+    const match = resolveIssueKey(event.subject, keywordRules, knownProjects);
     if (match) {
-      setIssueKey(match.jiraKey);
+      setIssueKey(match.issueKey);
       setIssueSummary('');
       setSuggestions([]);
     }
+  }
+
+  // Hand a skipped calendar entry over to the single-entry form so the user can
+  // pick its issue by hand. iOS page sheets do not like two modals changing in
+  // the same frame, hence the short handover delay.
+  function amendPlanItem(item: CalendarWorklogPlanItem) {
+    setActiveModal(null);
+    setTimeout(() => {
+      resetForm();
+      applyCalendarEvent(item.event as CalendarEvent);
+      setActiveModal('worklog');
+    }, 320);
   }
 
   const isIssueFavorited = jiraFavorites.some(f => f.key === issueKey.trim().toUpperCase());
@@ -994,6 +1116,19 @@ export default function TimeScreen() {
               </View>
               <Text style={styles.fabOptionText}>Log Absence</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.fabOption} onPress={() => openModal('bulkCalendar')}>
+              <View style={[styles.fabOptionIcon, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
+                <Icon name="calendar-import" size={22} color="#2563eb" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fabOptionText}>Log Day from Calendar</Text>
+                {calendarEvents.length > 0 && (
+                  <Text style={styles.fabOptionSub}>
+                    {readyPlanItems.length} of {calendarEvents.length} ready
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.fabOption} onPress={() => openModal('worklog')}>
               <View style={[styles.fabOptionIcon, { backgroundColor: 'rgba(0,101,89,0.1)' }]}>
                 <Icon name="clock-plus-outline" size={22} color="#006559" />
@@ -1157,6 +1292,143 @@ export default function TimeScreen() {
         <KeyboardAccessory />
       </Modal>
 
+      {/* ══ Log-day-from-calendar modal ══ */}
+      <Modal visible={activeModal === 'bulkCalendar'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.modal} contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Log Day from Calendar</Text>
+              <TouchableOpacity onPress={closeModal}>
+                <Text style={styles.modalClose}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.absenceDateBadge}>
+              <Icon name="calendar-today" size={15} color="#006559" />
+              <Text style={styles.absenceDateText}>
+                {parseYmd(selectedDate).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </Text>
+            </View>
+
+            {calendarPlan.length === 0 ? (
+              <Text style={styles.emptyText}>No calendar entries for this day.</Text>
+            ) : (
+              <>
+                <View style={styles.bulkSummary}>
+                  <View style={styles.bulkSummaryCell}>
+                    <Text style={styles.bulkSummaryValue}>{selectedPlanItems.length}</Text>
+                    <Text style={styles.bulkSummaryLabel}>to log</Text>
+                  </View>
+                  <View style={styles.bulkSummaryCell}>
+                    <Text style={styles.bulkSummaryValue}>{fmtDuration(selectedPlanSeconds)}</Text>
+                    <Text style={styles.bulkSummaryLabel}>hours</Text>
+                  </View>
+                  <View style={styles.bulkSummaryCell}>
+                    <Text style={[styles.bulkSummaryValue, skippedPlanItems.length > 0 && { color: '#b45309' }]}>
+                      {skippedPlanItems.length}
+                    </Text>
+                    <Text style={styles.bulkSummaryLabel}>skipped</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>Calendar entries ({calendarPlan.length})</Text>
+                {calendarPlan.map(item => {
+                  const ready    = item.status === 'ready';
+                  const selected = ready && !bulkExcluded.has(item.event.id);
+                  const failure  = bulkErrors[item.event.id];
+                  const amendable = item.status === 'no-rule' || item.status === 'invalid-key';
+                  return (
+                    <View key={item.event.id} style={[styles.bulkRow, !ready && styles.bulkRowSkipped]}>
+                      <TouchableOpacity
+                        style={styles.bulkRowMain}
+                        activeOpacity={ready ? 0.7 : 1}
+                        onPress={() => { if (ready) togglePlanItem(item.event.id); }}
+                      >
+                        <Icon
+                          name={ready ? (selected ? 'checkbox-marked' : 'checkbox-blank-outline') : 'minus-box-outline'}
+                          size={22}
+                          color={ready ? (selected ? '#006559' : '#9ca3af') : '#cbd5e1'}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[styles.bulkSubject, !ready && styles.bulkTextMuted]} numberOfLines={2}>
+                            {item.event.subject}
+                          </Text>
+                          <Text style={styles.bulkMeta}>
+                            {item.startTime} – {item.endTime} · {fmtDuration(item.timeSpentSeconds)}
+                          </Text>
+                          <View style={styles.bulkChipRow}>
+                            {ready ? (
+                              <View style={styles.bulkKeyChip}>
+                                <Text style={styles.bulkKeyChipText}>{item.issueKey}</Text>
+                              </View>
+                            ) : (
+                              <View style={styles.bulkReasonChip}>
+                                <Text style={styles.bulkReasonChipText}>{statusLabel(item.status)}</Text>
+                              </View>
+                            )}
+                            {!!item.matchedKeyword && (
+                              <Text style={styles.bulkMatchHint}>matched "{item.matchedKeyword}"</Text>
+                            )}
+                            {item.source === 'subject-key' && (
+                              <Text style={styles.bulkMatchHint}>key from subject</Text>
+                            )}
+                          </View>
+                          {item.overlapsPrevious && selected && (
+                            <Text style={styles.bulkWarn}>Overlaps the previous entry</Text>
+                          )}
+                          {item.status === 'invalid-key' && !!item.issueKey && (
+                            <Text style={styles.bulkWarn}>Rule points at "{item.issueKey}"</Text>
+                          )}
+                          {!!failure && <Text style={styles.bulkError}>{failure}</Text>}
+                        </View>
+                      </TouchableOpacity>
+                      {amendable && (
+                        <TouchableOpacity style={styles.bulkAmendBtn} onPress={() => amendPlanItem(item)} activeOpacity={0.7}>
+                          <Text style={styles.bulkAmendText}>Amend</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {amendablePlanItems.length > 0 && (
+                  <Text style={styles.bulkFootnote}>
+                    Entries without a keyword rule are left alone. Tap Amend to log one by hand, or add a rule under
+                    Profile → Worklog Keyword Rules so the subject text picks the issue automatically next time.
+                  </Text>
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    { marginTop: 24 },
+                    (submittingBulk || selectedPlanItems.length === 0) && { opacity: 0.6 },
+                  ]}
+                  onPress={() => submitBulk()}
+                  disabled={submittingBulk || selectedPlanItems.length === 0}
+                  activeOpacity={0.85}
+                >
+                  {submittingBulk ? (
+                    <View style={styles.bulkProgressRow}>
+                      <ActivityIndicator color="#fff" />
+                      <Text style={styles.submitBtnText}>
+                        {bulkProgress ? `Logging ${Math.min(bulkProgress.done + 1, bulkProgress.total)} of ${bulkProgress.total}…` : 'Logging…'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.submitBtnText}>
+                      {selectedPlanItems.length === 0
+                        ? 'Nothing to log'
+                        : `Log ${selectedPlanItems.length} ${selectedPlanItems.length === 1 ? 'entry' : 'entries'} · ${fmtDuration(selectedPlanSeconds)}`}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ══ Absence modal ══ */}
       <Modal visible={activeModal === 'absence'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
         <View style={{ flex: 1 }}>
@@ -1293,6 +1565,7 @@ const styles = StyleSheet.create({
   fabOption:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   fabOptionIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   fabOptionText: { fontSize: 15, fontWeight: '600', color: '#111' },
+  fabOptionSub:  { fontSize: 12, color: '#6b7280', marginTop: 1 },
 
   // modal
   modal:        { flex: 1, backgroundColor: '#f5f5f5', padding: 20 },
@@ -1416,4 +1689,39 @@ const styles = StyleSheet.create({
   calendarCardBadgeDisabled:{ backgroundColor: '#e5e7eb' },
   calendarCardDurationTextDisabled: { color: '#9ca3af' },
   calendarCardLoggedLabel:  { fontSize: 11, fontWeight: '600', color: '#9ca3af', marginTop: 6 },
+
+  // bulk calendar import
+  bulkSummary: {
+    flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12,
+    borderWidth: 1, borderColor: '#e5e5e5',
+    paddingVertical: 12, marginTop: 12,
+  },
+  bulkSummaryCell:  { flex: 1, alignItems: 'center' },
+  bulkSummaryValue: { fontSize: 18, fontWeight: '700', color: '#006559' },
+  bulkSummaryLabel: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  bulkRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e5e5',
+    paddingHorizontal: 12, paddingVertical: 12, marginTop: 8,
+  },
+  bulkRowSkipped: { backgroundColor: '#fafafa', borderColor: '#ececec' },
+  bulkRowMain:    { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+  bulkSubject:    { fontSize: 14, fontWeight: '600', color: '#111' },
+  bulkTextMuted:  { color: '#6b7280' },
+  bulkMeta:       { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  bulkChipRow:    { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  bulkKeyChip:    { backgroundColor: '#e6f4f1', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  bulkKeyChipText:{ fontSize: 12, fontWeight: '700', color: '#006559' },
+  bulkReasonChip: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  bulkReasonChipText: { fontSize: 12, fontWeight: '600', color: '#b45309' },
+  bulkMatchHint:  { fontSize: 11, color: '#9ca3af' },
+  bulkWarn:       { fontSize: 11, color: '#b45309', marginTop: 4 },
+  bulkError:      { fontSize: 11, color: '#ef4444', marginTop: 4 },
+  bulkAmendBtn: {
+    marginLeft: 10, borderRadius: 8, borderWidth: 1, borderColor: '#006559',
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  bulkAmendText:  { fontSize: 13, fontWeight: '700', color: '#006559' },
+  bulkFootnote:   { fontSize: 12, color: '#6b7280', lineHeight: 17, marginTop: 14 },
+  bulkProgressRow:{ flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

@@ -270,7 +270,7 @@ export async function getCalendarEvents(
   const end   = `${dateStr}T23:59:59`;
   const params =
     `startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}` +
-    `&$select=id,subject,start,end,isAllDay,showAs&$orderby=start/dateTime&$top=20`;
+    `&$select=id,subject,start,end,isAllDay,showAs&$orderby=start/dateTime&$top=50`;
 
   function parseEvents(value: any[]): CalendarEvent[] {
     return value
