@@ -324,3 +324,115 @@ describe('buildCalendarWorklogPlan', () => {
     expect(plan[0].status).toBe('no-rule');
   });
 });
+
+// ── manual overrides ─────────────────────────────────────────────────────────
+// The day-log sheet lets the user pick an issue for an entry the rules could
+// not resolve. That choice is an override, and it outranks the rules.
+
+describe('buildCalendarWorklogPlan with manual overrides', () => {
+  // makes an otherwise unresolved entry ready once an issue is chosen for it
+  it('makes an otherwise unresolved entry ready once an issue is chosen for it', () => {
+    // Arrange
+    const events = [ev('Coffee with Anna', '10:00', '10:30', 'coffee')];
+
+    // Act
+    const plan = buildCalendarWorklogPlan({
+      events,
+      rules: [],
+      existing: [],
+      overrides: { coffee: 'INT-9' },
+    });
+
+    // Assert
+    expect(plan[0]).toMatchObject({ status: 'ready', issueKey: 'INT-9', source: 'manual' });
+  });
+
+  // lets a chosen issue win over a keyword rule that also matched
+  it('lets a chosen issue win over a keyword rule that also matched', () => {
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Daily standup', '09:00', '09:30', 'standup')],
+      rules: [rule('standup', 'INT-5')],
+      existing: [],
+      overrides: { standup: 'SAL-3' },
+    });
+    expect(plan[0].issueKey).toBe('SAL-3');
+  });
+
+  // uppercases a chosen key so a typed lowercase issue still posts
+  it('uppercases a chosen key so a typed lowercase issue still posts', () => {
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Coffee', '10:00', '10:30', 'coffee')],
+      rules: [],
+      existing: [],
+      overrides: { coffee: 'int-9' },
+    });
+    expect(plan[0]).toMatchObject({ status: 'ready', issueKey: 'INT-9' });
+  });
+
+  // still skips a malformed chosen key rather than sending it to Tempo
+  it('still skips a malformed chosen key rather than sending it to Tempo', () => {
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Coffee', '10:00', '10:30', 'coffee')],
+      rules: [],
+      existing: [],
+      overrides: { coffee: 'nonsense' },
+    });
+    expect(plan[0].status).toBe('invalid-key');
+  });
+
+  // does not let a choice revive an entry that is already on the timesheet
+  it('does not let a choice revive an entry that is already on the timesheet', () => {
+    // Arrange — the slot is already logged, so choosing an issue must not re-post it
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Daily standup', '09:00', '09:30', 'standup')],
+      rules: [],
+      existing: [{ startTime: '09:00', timeSpentSeconds: 1800 }],
+      overrides: { standup: 'INT-5' },
+    });
+
+    // Assert
+    expect(plan[0].status).toBe('already-logged');
+  });
+
+  // does not let a choice revive a zero-length entry Tempo would reject
+  it('does not let a choice revive a zero-length entry Tempo would reject', () => {
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Placeholder', '09:00', '09:00', 'ph')],
+      rules: [],
+      existing: [],
+      overrides: { ph: 'INT-5' },
+    });
+    expect(plan[0].status).toBe('zero-duration');
+  });
+
+  // ignores an override aimed at an event that is not in the day
+  it('ignores an override aimed at an event that is not in the day', () => {
+    const plan = buildCalendarWorklogPlan({
+      events: [ev('Coffee', '10:00', '10:30', 'coffee')],
+      rules: [],
+      existing: [],
+      overrides: { 'some-other-event': 'INT-9' },
+    });
+    expect(plan[0].status).toBe('no-rule');
+  });
+
+  // counts a chosen entry when working out overlaps
+  it('counts a chosen entry when working out overlaps', () => {
+    // Arrange — the first entry is only ready because an issue was chosen
+    const events = [
+      ev('Coffee', '09:00', '10:00', 'coffee'),
+      ev('Standup', '09:30', '10:30', 'standup'),
+    ];
+
+    // Act
+    const plan = buildCalendarWorklogPlan({
+      events,
+      rules: [rule('standup', 'INT-5')],
+      existing: [],
+      overrides: { coffee: 'INT-9' },
+    });
+
+    // Assert
+    expect(plan.map(p => p.overlapsPrevious)).toEqual([false, true]);
+  });
+});

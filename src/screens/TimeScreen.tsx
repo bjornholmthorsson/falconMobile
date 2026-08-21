@@ -43,10 +43,10 @@ import { useAppStore } from '../store/appStore';
 import { isIcelandicHoliday, isWeekend } from '../utils/icelandicHolidays';
 import {
   buildCalendarWorklogPlan,
+  isValidJiraKey,
   knownProjectsFrom,
   resolveIssueKey,
   statusLabel,
-  type CalendarWorklogPlanItem,
 } from '../utils/calendarWorklogs';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -572,6 +572,16 @@ export default function TimeScreen() {
   // Events the user has un-ticked in the preview, and per-event failures from
   // the last run (keyed by calendar event id).
   const [bulkExcluded, setBulkExcluded] = useState<Set<string>>(new Set());
+  // Issues picked by hand for entries the rules could not resolve, keyed by
+  // calendar event id. Chosen inline in the sheet rather than by handing the
+  // entry to the Log Work modal: swapping page sheets meant this sheet's
+  // onDismiss fired after the new one had opened and closed it again.
+  const [issueOverrides,  setIssueOverrides]  = useState<Record<string, string>>({});
+  const [pickerFor,       setPickerFor]       = useState<string | null>(null);
+  const [pickerQuery,     setPickerQuery]     = useState('');
+  const [pickerResults,   setPickerResults]   = useState<JiraIssue[]>([]);
+  const [pickerSearching, setPickerSearching] = useState(false);
+  const pickerTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [bulkErrors,   setBulkErrors]   = useState<Record<string, string>>({});
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -592,8 +602,9 @@ export default function TimeScreen() {
       rules:    keywordRules,
       existing: dayWorklogs,
       knownProjects,
+      overrides: issueOverrides,
     }),
-    [calendarEvents, keywordRules, dayWorklogs, knownProjects],
+    [calendarEvents, keywordRules, dayWorklogs, knownProjects, issueOverrides],
   );
 
   const readyPlanItems    = calendarPlan.filter(p => p.status === 'ready');
@@ -609,6 +620,54 @@ export default function TimeScreen() {
       else next.add(eventId);
       return next;
     });
+  }
+
+  function resetPicker() {
+    setPickerQuery('');
+    setPickerResults([]);
+    setPickerSearching(false);
+    if (pickerTimeout.current) clearTimeout(pickerTimeout.current);
+  }
+
+  function togglePicker(eventId: string) {
+    resetPicker();
+    setPickerFor(prev => (prev === eventId ? null : eventId));
+  }
+
+  function chooseIssueFor(eventId: string, key: string) {
+    setIssueOverrides(prev => ({ ...prev, [eventId]: key.trim().toUpperCase() }));
+    // A just-chosen entry should count towards the batch even if it had been
+    // un-ticked while it was unresolved.
+    setBulkExcluded(prev => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setPickerFor(null);
+    resetPicker();
+  }
+
+  function clearIssueFor(eventId: string) {
+    setIssueOverrides(prev => {
+      const next = { ...prev };
+      delete next[eventId];
+      return next;
+    });
+    setPickerFor(null);
+    resetPicker();
+  }
+
+  function onPickerQueryChange(text: string) {
+    setPickerQuery(text);
+    setPickerResults([]);
+    if (pickerTimeout.current) clearTimeout(pickerTimeout.current);
+    if (text.trim().length < 2) return;
+    pickerTimeout.current = setTimeout(async () => {
+      setPickerSearching(true);
+      try { setPickerResults((await searchJiraIssues(text)).slice(0, 8)); }
+      catch { /* leave the favourites and the typed-key option in place */ }
+      finally { setPickerSearching(false); }
+    }, 400);
   }
 
   const { data: absenceTypes, isLoading: absenceTypesLoading } = useQuery<TempoAbsenceType[]>({
@@ -682,6 +741,9 @@ export default function TimeScreen() {
       setBulkExcluded(new Set());
       setBulkErrors({});
       setBulkProgress(null);
+      setIssueOverrides({});
+      setPickerFor(null);
+      resetPicker();
     }
     setActiveModal(type);
   }
@@ -826,17 +888,6 @@ export default function TimeScreen() {
     }
   }
 
-  // Hand a skipped calendar entry over to the single-entry form so the user can
-  // pick its issue by hand. iOS page sheets do not like two modals changing in
-  // the same frame, hence the short handover delay.
-  function amendPlanItem(item: CalendarWorklogPlanItem) {
-    setActiveModal(null);
-    setTimeout(() => {
-      resetForm();
-      applyCalendarEvent(item.event as CalendarEvent);
-      setActiveModal('worklog');
-    }, 320);
-  }
 
   const isIssueFavorited = jiraFavorites.some(f => f.key === issueKey.trim().toUpperCase());
 
@@ -1295,7 +1346,12 @@ export default function TimeScreen() {
       {/* ══ Log-day-from-calendar modal ══ */}
       <Modal visible={activeModal === 'bulkCalendar'} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal} onDismiss={closeModal}>
         <View style={{ flex: 1 }}>
-          <ScrollView style={styles.modal} contentContainerStyle={{ paddingBottom: 40 }}>
+          <ScrollView
+            style={styles.modal}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Log Day from Calendar</Text>
               <TouchableOpacity onPress={closeModal}>
@@ -1336,56 +1392,139 @@ export default function TimeScreen() {
                   const ready    = item.status === 'ready';
                   const selected = ready && !bulkExcluded.has(item.event.id);
                   const failure  = bulkErrors[item.event.id];
-                  const amendable = item.status === 'no-rule' || item.status === 'invalid-key';
+                  const chosen   = !!issueOverrides[item.event.id];
+                  // An issue can be picked for anything the rules could not
+                  // resolve, and re-picked for anything already chosen.
+                  const canChoose  = item.status === 'no-rule' || item.status === 'invalid-key' || chosen;
+                  const pickerOpen = pickerFor === item.event.id;
+                  const typedKey   = pickerQuery.trim().toUpperCase();
                   return (
                     <View key={item.event.id} style={[styles.bulkRow, !ready && styles.bulkRowSkipped]}>
-                      <TouchableOpacity
-                        style={styles.bulkRowMain}
-                        activeOpacity={ready ? 0.7 : 1}
-                        onPress={() => { if (ready) togglePlanItem(item.event.id); }}
-                      >
-                        <Icon
-                          name={ready ? (selected ? 'checkbox-marked' : 'checkbox-blank-outline') : 'minus-box-outline'}
-                          size={22}
-                          color={ready ? (selected ? '#006559' : '#9ca3af') : '#cbd5e1'}
-                        />
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={[styles.bulkSubject, !ready && styles.bulkTextMuted]} numberOfLines={2}>
-                            {item.event.subject}
-                          </Text>
-                          <Text style={styles.bulkMeta}>
-                            {item.startTime} – {item.endTime} · {fmtDuration(item.timeSpentSeconds)}
-                          </Text>
-                          <View style={styles.bulkChipRow}>
-                            {ready ? (
-                              <View style={styles.bulkKeyChip}>
-                                <Text style={styles.bulkKeyChipText}>{item.issueKey}</Text>
-                              </View>
-                            ) : (
-                              <View style={styles.bulkReasonChip}>
-                                <Text style={styles.bulkReasonChipText}>{statusLabel(item.status)}</Text>
-                              </View>
+                      <View style={styles.bulkRowTop}>
+                        <TouchableOpacity
+                          style={styles.bulkRowMain}
+                          activeOpacity={ready ? 0.7 : 1}
+                          onPress={() => { if (ready) togglePlanItem(item.event.id); }}
+                        >
+                          <Icon
+                            name={ready ? (selected ? 'checkbox-marked' : 'checkbox-blank-outline') : 'minus-box-outline'}
+                            size={22}
+                            color={ready ? (selected ? '#006559' : '#9ca3af') : '#cbd5e1'}
+                          />
+                          <View style={{ flex: 1, marginLeft: 10 }}>
+                            <Text style={[styles.bulkSubject, !ready && styles.bulkTextMuted]} numberOfLines={2}>
+                              {item.event.subject}
+                            </Text>
+                            <Text style={styles.bulkMeta}>
+                              {item.startTime} – {item.endTime} · {fmtDuration(item.timeSpentSeconds)}
+                            </Text>
+                            <View style={styles.bulkChipRow}>
+                              {ready ? (
+                                <View style={styles.bulkKeyChip}>
+                                  <Text style={styles.bulkKeyChipText}>{item.issueKey}</Text>
+                                </View>
+                              ) : (
+                                <View style={styles.bulkReasonChip}>
+                                  <Text style={styles.bulkReasonChipText}>{statusLabel(item.status)}</Text>
+                                </View>
+                              )}
+                              {!!item.matchedKeyword && (
+                                <Text style={styles.bulkMatchHint}>matched "{item.matchedKeyword}"</Text>
+                              )}
+                              {item.source === 'subject-key' && (
+                                <Text style={styles.bulkMatchHint}>key from subject</Text>
+                              )}
+                              {item.source === 'manual' && (
+                                <Text style={styles.bulkMatchHint}>picked by you</Text>
+                              )}
+                            </View>
+                            {item.overlapsPrevious && selected && (
+                              <Text style={styles.bulkWarn}>Overlaps the previous entry</Text>
                             )}
-                            {!!item.matchedKeyword && (
-                              <Text style={styles.bulkMatchHint}>matched "{item.matchedKeyword}"</Text>
+                            {item.status === 'invalid-key' && !!item.issueKey && (
+                              <Text style={styles.bulkWarn}>Rule points at "{item.issueKey}"</Text>
                             )}
-                            {item.source === 'subject-key' && (
-                              <Text style={styles.bulkMatchHint}>key from subject</Text>
-                            )}
+                            {!!failure && <Text style={styles.bulkError}>{failure}</Text>}
                           </View>
-                          {item.overlapsPrevious && selected && (
-                            <Text style={styles.bulkWarn}>Overlaps the previous entry</Text>
-                          )}
-                          {item.status === 'invalid-key' && !!item.issueKey && (
-                            <Text style={styles.bulkWarn}>Rule points at "{item.issueKey}"</Text>
-                          )}
-                          {!!failure && <Text style={styles.bulkError}>{failure}</Text>}
-                        </View>
-                      </TouchableOpacity>
-                      {amendable && (
-                        <TouchableOpacity style={styles.bulkAmendBtn} onPress={() => amendPlanItem(item)} activeOpacity={0.7}>
-                          <Text style={styles.bulkAmendText}>Amend</Text>
                         </TouchableOpacity>
+                        {canChoose && (
+                          <TouchableOpacity
+                            style={[styles.bulkAmendBtn, pickerOpen && styles.bulkAmendBtnActive]}
+                            onPress={() => togglePicker(item.event.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.bulkAmendText, pickerOpen && styles.bulkAmendTextActive]}>
+                              {pickerOpen ? 'Close' : chosen ? 'Change' : 'Set issue'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {pickerOpen && (
+                        <View style={styles.pickerPanel}>
+                          {jiraFavorites.length > 0 && (
+                            <>
+                              <Text style={styles.pickerLabel}>Favourites</Text>
+                              <View style={styles.pickerChipWrap}>
+                                {jiraFavorites.map(f => (
+                                  <TouchableOpacity
+                                    key={f.key}
+                                    style={styles.pickerChip}
+                                    onPress={() => chooseIssueFor(item.event.id, f.key)}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Text style={styles.pickerChipKey}>{f.key}</Text>
+                                    {!!f.summary && (
+                                      <Text style={styles.pickerChipSummary} numberOfLines={1}>{f.summary}</Text>
+                                    )}
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            </>
+                          )}
+
+                          <Text style={styles.pickerLabel}>Or any Jira issue</Text>
+                          <TextInput
+                            style={styles.pickerInput}
+                            placeholder="e.g. INT-5 or search by name"
+                            placeholderTextColor="#aaa"
+                            value={pickerQuery}
+                            onChangeText={onPickerQueryChange}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                          />
+                          {pickerSearching && <ActivityIndicator size="small" color="#006559" style={styles.pickerSpinner} />}
+                          {isValidJiraKey(typedKey) && (
+                            <TouchableOpacity
+                              style={styles.pickerResultRow}
+                              onPress={() => chooseIssueFor(item.event.id, typedKey)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.pickerResultKey}>{typedKey}</Text>
+                              <Text style={styles.pickerResultSummary}>use this key</Text>
+                            </TouchableOpacity>
+                          )}
+                          {pickerResults.map(r => (
+                            <TouchableOpacity
+                              key={r.key}
+                              style={styles.pickerResultRow}
+                              onPress={() => chooseIssueFor(item.event.id, r.key)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.pickerResultKey}>{r.key}</Text>
+                              <Text style={styles.pickerResultSummary} numberOfLines={1}>{r.summary}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          {chosen && (
+                            <TouchableOpacity
+                              style={styles.pickerClearBtn}
+                              onPress={() => clearIssueFor(item.event.id)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.pickerClearText}>Remove chosen issue</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       )}
                     </View>
                   );
@@ -1393,8 +1532,9 @@ export default function TimeScreen() {
 
                 {amendablePlanItems.length > 0 && (
                   <Text style={styles.bulkFootnote}>
-                    Entries without a keyword rule are left alone. Tap Amend to log one by hand, or add a rule under
-                    Profile → Worklog Keyword Rules so the subject text picks the issue automatically next time.
+                    Entries without a keyword rule are never guessed. Tap "Set issue" to pick one from your favourites
+                    or search Jira, then log it with the rest. Adding a rule under Profile → Worklog Keyword Rules
+                    makes that subject resolve on its own next time.
                   </Text>
                 )}
 
@@ -1427,6 +1567,7 @@ export default function TimeScreen() {
             )}
           </ScrollView>
         </View>
+        <KeyboardAccessory />
       </Modal>
 
       {/* ══ Absence modal ══ */}
@@ -1700,10 +1841,10 @@ const styles = StyleSheet.create({
   bulkSummaryValue: { fontSize: 18, fontWeight: '700', color: '#006559' },
   bulkSummaryLabel: { fontSize: 11, color: '#6b7280', marginTop: 2 },
   bulkRow: {
-    flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e5e5',
     paddingHorizontal: 12, paddingVertical: 12, marginTop: 8,
   },
+  bulkRowTop: { flexDirection: 'row', alignItems: 'center' },
   bulkRowSkipped: { backgroundColor: '#fafafa', borderColor: '#ececec' },
   bulkRowMain:    { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
   bulkSubject:    { fontSize: 14, fontWeight: '600', color: '#111' },
@@ -1721,7 +1862,37 @@ const styles = StyleSheet.create({
     marginLeft: 10, borderRadius: 8, borderWidth: 1, borderColor: '#006559',
     paddingHorizontal: 12, paddingVertical: 7,
   },
-  bulkAmendText:  { fontSize: 13, fontWeight: '700', color: '#006559' },
+  bulkAmendText:      { fontSize: 13, fontWeight: '700', color: '#006559' },
+  bulkAmendBtnActive: { backgroundColor: '#006559' },
+  bulkAmendTextActive:{ color: '#fff' },
+
+  // inline issue picker
+  pickerPanel: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: '#eee',
+  },
+  pickerLabel:    { fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
+  pickerChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  pickerChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#e6f4f1', borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 8, maxWidth: 240,
+  },
+  pickerChipKey:     { fontSize: 13, fontWeight: '700', color: '#006559' },
+  pickerChipSummary: { fontSize: 12, color: '#4b5563', flexShrink: 1 },
+  pickerInput: {
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e5e5',
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#111',
+  },
+  pickerSpinner: { marginTop: 8, alignSelf: 'flex-start' },
+  pickerResultRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  pickerResultKey:     { fontSize: 13, fontWeight: '700', color: '#006559', minWidth: 64 },
+  pickerResultSummary: { flex: 1, fontSize: 13, color: '#333' },
+  pickerClearBtn:  { marginTop: 12, alignSelf: 'flex-start' },
+  pickerClearText: { fontSize: 13, fontWeight: '600', color: '#ef4444' },
   bulkFootnote:   { fontSize: 12, color: '#6b7280', lineHeight: 17, marginTop: 14 },
   bulkProgressRow:{ flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

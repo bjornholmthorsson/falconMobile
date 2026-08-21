@@ -31,7 +31,7 @@ export interface LoggedEntryLike {
 }
 
 /** How the issue key was established, for display in the preview. */
-export type IssueKeySource = 'subject-key' | 'rule';
+export type IssueKeySource = 'subject-key' | 'rule' | 'manual';
 
 export interface IssueKeyMatch {
   issueKey: string;
@@ -211,11 +211,19 @@ export function buildCalendarWorklogPlan({
   rules,
   existing,
   knownProjects,
+  overrides,
 }: {
   events: CalendarEventLike[];
   rules: KeywordRuleLike[];
   existing: LoggedEntryLike[];
   knownProjects?: Set<string>;
+  /**
+   * Issues the user picked by hand in the day-log sheet, keyed by calendar
+   * event id. An explicit choice outranks the keyword rules, but it cannot
+   * revive an entry that is already logged or has no duration — those would
+   * double-post or be rejected by Tempo whatever issue is attached.
+   */
+  overrides?: Record<string, string>;
 }): CalendarWorklogPlanItem[] {
   const projects = knownProjects ?? knownProjectsFrom(rules);
   const ordered = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -255,7 +263,10 @@ export function buildCalendarWorklogPlan({
       continue;
     }
 
-    const match = resolveIssueKey(event.subject, rules, projects);
+    const override = overrides?.[event.id]?.trim();
+    const match: IssueKeyMatch | null = override
+      ? { issueKey: override.toUpperCase(), keyword: null, source: 'manual' }
+      : resolveIssueKey(event.subject, rules, projects);
     if (!match) {
       plan.push({ ...base, status: 'no-rule' });
       continue;
